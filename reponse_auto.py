@@ -523,6 +523,7 @@ def resume_github(lignes):
 
 
 def main():
+    global PAGE_ID
     manquantes = [n for n, v in (("FB_PAGE_ID", PAGE_ID), ("FB_PAGE_TOKEN", PAGE_TOKEN)) if not v]
     if manquantes:
         log("❌ Variables manquantes :", ", ".join(manquantes))
@@ -536,6 +537,18 @@ def main():
 
     log(f"Démarrage — IA {FOURNISSEUR} ({MODELE_IA}), API Graph {GRAPH_VERSION}"
         + (" — MODE TEST (rien n'est publié)" if MODE_TEST else ""))
+
+    # Le jeton désigne lui-même la Page : on vérifie qu'il correspond bien à FB_PAGE_ID.
+    try:
+        moi = graph("GET", "me", {"fields": "id,name"})
+        log(f"Page reconnue : {moi.get('name')} (id {moi.get('id')})")
+        if moi.get("id") and str(moi["id"]) != str(PAGE_ID):
+            log(f"⚠️ FB_PAGE_ID ({PAGE_ID}) ne correspond pas au jeton : "
+                f"l'identifiant {moi['id']} du jeton est utilisé à la place.")
+            PAGE_ID = str(moi["id"])
+    except ErreurGraph as e:
+        log(f"❌ Jeton inutilisable : {e} (code {e.code})")
+        return 1
 
     ton = charger_ton()
     etat = charger_etat()
