@@ -2,7 +2,7 @@ name: Réponses automatiques Facebook
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # toutes les 10 minutes (GitHub peut ajouter quelques minutes de retard)
+    - cron: "2-59/10 * * * *"   # toutes les 10 minutes (GitHub peut ajouter quelques minutes de retard)
   workflow_dispatch:          # bouton « Run workflow » pour lancer à la main
     inputs:
       mode_test:
