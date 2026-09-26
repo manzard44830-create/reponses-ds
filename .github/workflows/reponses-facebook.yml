@@ -1,0 +1,64 @@
+name: Réponses automatiques Facebook
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # toutes les 10 minutes (GitHub peut ajouter quelques minutes de retard)
+  workflow_dispatch:          # bouton « Run workflow » pour lancer à la main
+    inputs:
+      mode_test:
+        description: "Mode test (1 = affiche les réponses sans rien publier)"
+        default: "1"
+
+concurrency:
+  group: reponses-facebook
+  cancel-in-progress: false
+
+jobs:
+  repondre:
+    # Les passages automatiques ne tournent que si MODE_TEST vaut 0.
+    # Tant que MODE_TEST n'est pas à 0, seuls les tests lancés à la main fonctionnent
+    # (ça évite de payer l'IA toutes les 10 minutes pendant la phase de test).
+    if: github.event_name != 'schedule' || vars.MODE_TEST == '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Récupérer la mémoire des commentaires traités
+        uses: actions/cache/restore@v4
+        with:
+          path: etat.json
+          key: etat-${{ github.run_id }}
+          restore-keys: etat-
+
+      - name: Répondre aux commentaires
+        env:
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          # Renseigne UNE SEULE de ces clés dans les secrets
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          IA_API_KEY: ${{ secrets.IA_API_KEY }}
+          IA_BASE_URL: ${{ vars.IA_BASE_URL }}
+          FOURNISSEUR_IA: ${{ vars.FOURNISSEUR_IA }}
+          # Lancement manuel : valeur saisie. Exécution planifiée : variable MODE_TEST du dépôt.
+          # Sécurité : tant que la variable MODE_TEST=0 n'est pas créée, RIEN n'est publié.
+          MODE_TEST: ${{ github.event.inputs.mode_test || vars.MODE_TEST || '1' }}
+          MODELE_IA: ${{ vars.MODELE_IA }}
+          MAX_REPONSES_PAR_EXECUTION: ${{ vars.MAX_REPONSES_PAR_EXECUTION }}
+          AGE_MAX_VIDEO_JOURS: ${{ vars.AGE_MAX_VIDEO_JOURS }}
+          AGE_MAX_COMMENTAIRE_HEURES: ${{ vars.AGE_MAX_COMMENTAIRE_HEURES }}
+          LIKER_COMMENTAIRES: ${{ vars.LIKER_COMMENTAIRES }}
+          VIDEOS_SEULEMENT: ${{ vars.VIDEOS_SEULEMENT }}
+          PAUSE_ENTRE_APPELS_IA: ${{ vars.PAUSE_ENTRE_APPELS_IA }}
+          PAUSE_PUBLICATION_MIN: ${{ vars.PAUSE_PUBLICATION_MIN }}
+          PAUSE_PUBLICATION_MAX: ${{ vars.PAUSE_PUBLICATION_MAX }}
+          DELAI_MIN_COMMENTAIRE_MINUTES: ${{ vars.DELAI_MIN_COMMENTAIRE_MINUTES }}
+        run: python3 reponse_auto.py
+
+      - name: Sauvegarder la mémoire
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: etat.json
+          key: etat-${{ github.run_id }}
