@@ -221,15 +221,27 @@ def recuperer_videos():
     depuis = int((datetime.now(timezone.utc) - AGE_MAX_VIDEO).timestamp())
     videos = {}
 
-    publications = graph_pagine(
-        f"{PAGE_ID}/posts",
-        {
-            "fields": "id,created_time,message,permalink_url,attachments{media_type,type,title,description}",
-            "since": depuis,
-            "limit": 50,
-        },
-        maximum=300,
-    )
+    # Selon le type de Page, l'API expose /posts, /feed ou /published_posts.
+    champs = "id,created_time,message,permalink_url,attachments{media_type,type,title,description}"
+    publications = []
+    derniere_erreur = None
+    for edge in ("posts", "feed", "published_posts"):
+        try:
+            publications = graph_pagine(
+                f"{PAGE_ID}/{edge}",
+                {"fields": champs, "since": depuis, "limit": 50},
+                maximum=300,
+            )
+            if edge != "posts":
+                log(f"  (publications lues via /{edge})")
+            break
+        except ErreurGraph as e:
+            derniere_erreur = e
+            if e.code in (100, 12):   # champ inexistant ou déprécié : on essaie l'adresse suivante
+                continue
+            raise
+    else:
+        raise derniere_erreur
     for pub in publications:
         if VIDEOS_SEULEMENT and not est_video(pub):
             continue
