@@ -1,9 +1,14 @@
 name: Réponses automatiques Facebook
 
+# Pourquoi une boucle : GitHub saute très souvent les tâches planifiées rapprochées.
+# Ici, il ne lance qu'une exécution toutes les 4 heures, et c'est cette exécution
+# qui relance le programme toutes les 10 minutes pendant 4 h 15, de l'intérieur.
+# Le recouvrement de 15 minutes garantit qu'une boucle prend toujours le relais.
+
 on:
   schedule:
-    - cron: "2-59/10 * * * *"   # toutes les 10 minutes (GitHub peut ajouter quelques minutes de retard)
-  workflow_dispatch:          # bouton « Run workflow » pour lancer à la main
+    - cron: "7 */4 * * *"   # à 00h07, 04h07, 08h07, 12h07, 16h07 et 20h07 (UTC)
+  workflow_dispatch:         # bouton « Run workflow » : fait UN seul passage, tout de suite
     inputs:
       mode_test:
         description: "Mode test (1 = affiche les réponses sans rien publier)"
@@ -15,12 +20,11 @@ concurrency:
 
 jobs:
   repondre:
-    # Les passages automatiques ne tournent que si MODE_TEST vaut 0.
-    # Tant que MODE_TEST n'est pas à 0, seuls les tests lancés à la main fonctionnent
-    # (ça évite de payer l'IA toutes les 10 minutes pendant la phase de test).
+    # Les boucles automatiques ne tournent que si MODE_TEST vaut 0.
+    # Tant que MODE_TEST n'est pas à 0, seuls les tests lancés à la main fonctionnent.
     if: github.event_name != 'schedule' || vars.MODE_TEST == '0'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
 
@@ -41,7 +45,7 @@ jobs:
           IA_API_KEY: ${{ secrets.IA_API_KEY }}
           IA_BASE_URL: ${{ vars.IA_BASE_URL }}
           FOURNISSEUR_IA: ${{ vars.FOURNISSEUR_IA }}
-          # Lancement manuel : valeur saisie. Exécution planifiée : variable MODE_TEST du dépôt.
+          # Lancement manuel : valeur saisie. Boucle planifiée : variable MODE_TEST du dépôt.
           # Sécurité : tant que la variable MODE_TEST=0 n'est pas créée, RIEN n'est publié.
           MODE_TEST: ${{ github.event.inputs.mode_test || vars.MODE_TEST || '1' }}
           MODELE_IA: ${{ vars.MODELE_IA }}
@@ -54,7 +58,34 @@ jobs:
           PAUSE_PUBLICATION_MIN: ${{ vars.PAUSE_PUBLICATION_MIN }}
           PAUSE_PUBLICATION_MAX: ${{ vars.PAUSE_PUBLICATION_MAX }}
           DELAI_MIN_COMMENTAIRE_MINUTES: ${{ vars.DELAI_MIN_COMMENTAIRE_MINUTES }}
-        run: python3 reponse_auto.py
+          EVENEMENT: ${{ github.event_name }}
+        run: |
+          set -u
+          INTERVALLE=600          # 10 minutes entre deux passages
+          DUREE_BOUCLE=15300      # 4 h 15 de boucle, pour recouvrir le lancement suivant
+
+          if [ "$EVENEMENT" != "schedule" ]; then
+            echo "Lancement manuel : un seul passage."
+            python3 reponse_auto.py
+            exit $?
+          fi
+
+          FIN=$(( $(date +%s) + DUREE_BOUCLE ))
+          PASSAGE=0
+          while true; do
+            PASSAGE=$(( PASSAGE + 1 ))
+            DEBUT=$(date +%s)
+            echo "::group::Passage $PASSAGE — $(date -u '+%H:%M:%S UTC')"
+            python3 reponse_auto.py || echo "⚠️ Passage $PASSAGE en erreur, la boucle continue."
+            echo "::endgroup::"
+
+            if [ $(date +%s) -ge $FIN ]; then
+              echo "Fin de la boucle après $PASSAGE passage(s). La prochaine prend le relais."
+              break
+            fi
+            RESTE=$(( INTERVALLE - ( $(date +%s) - DEBUT ) ))
+            [ $RESTE -gt 0 ] && sleep $RESTE
+          done
 
       - name: Sauvegarder la mémoire
         if: always()
