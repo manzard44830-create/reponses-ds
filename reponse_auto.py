@@ -476,29 +476,30 @@ MOTS_LANGUES = {
           "pour dans sur très était magnifique superbe sublime splendide classe belle beau beauté déesse merveille "
           "merveilleux souvenirs souvenir adore voiture bagnole quel quelle quels quelles relique merci remercie "
           "plaisir content ravi gentil touche sympa fier fierté volant balade bichonne sortie sorties privilège "
-          "conduire chaque toujours reste vraiment elle lui leur ça",
+          "conduire chaque toujours reste vraiment elle lui leur ça non peu plus tout tous toute trop encore déjà "
+          "aussi comme mais où oui voilà sont avait avoir être fait faire cet ces son sa ses",
     "it": "il lo la le gli un una e è che di del della per con non mi ti sono era questo questa molto quanti quanto "
           "bella bellissima bellissimo meraviglia ricordi ricordo macchina grazie ringrazio piacere contento gentile "
           "cuore leggerlo allegria orgoglio guidare guido strada ogni volta sempre ho mio mia lei ero stato stata dal "
+          "stupenda stupendo splendida fantastica mito "
           "nel nella alla sul sulla anche ma più oggi quando come",
     "en": "the an and is it this that was my i you of to in with very so beautiful car love great what thank "
-          "thanks glad lovely kind her she always every drive proud pleasure",
+          "thanks glad lovely kind her she always every drive proud pleasure nice awesome amazing gorgeous stunning "
+          "wonderful",
     "es": "el la los las un una y es de por con muy mi preciosa precioso hermoso hermosa coche qué recuerdos "
           "gracias agradezco alegra amable corazón encantado placer orgullo siempre cada que le guste gusta tanto "
-          "haga ese esta este también",
+          "haga ese esta este también maravilla bonito bonita increíble mito",
     "de": "der die das und ist ein eine nicht ich mit sehr schön schöne auto wunderschön danke dank freut "
-          "herzlichen vielen nett immer sie ihnen",
-    "nl": "de het een van niet ik met zeer mooi mooie prachtig nog dank bedankt fijn leuk wat u ze",
-    "pt": "os um uma e é de com muito meu minha lindo linda carro que obrigado agradeço feliz gentileza sempre",
+          "herzlichen vielen nett immer sie ihnen toll herrlich",
+    "nl": "de het een van niet ik met zeer mooi mooie prachtig nog dank bedankt fijn leuk wat u ze schitterend",
+    "pt": "os um uma e é de com muito meu minha lindo linda carro que obrigado agradeço feliz gentileza sempre "
+          "maravilhoso maravilhosa",
     "pl": "w z na nie jest to że bardzo piękny piękna samochód się dziękuję dzięki miło cieszę",
 }
 MOTS_LANGUES = {k: set(v.split()) for k, v in MOTS_LANGUES.items()}
 
 
-def detecter_langue(texte):
-    """Langue probable du commentaire (fr, en, it, es, de, nl, pl, pt), ou None si incertain."""
-    if not re.search(r"[^\W\d_]", texte):
-        return "fr"                      # emojis seuls : réponse en français
+def scores_langues(texte):
     bas = texte.lower().replace("’", "'")
     mots = re.findall(r"[^\W\d_]+", bas)
     scores = {lg: sum(1 for m in mots if m in vocab) for lg, vocab in MOTS_LANGUES.items()}
@@ -509,11 +510,30 @@ def detecter_langue(texte):
         scores["es"] += 2
     if re.search(r"[ãõ]", bas):
         scores["pt"] += 2
-    if re.search(r"[ßäöü]", bas):
+    if "ß" in bas:
         scores["de"] += 1
+    return scores
+
+
+def detecter_langue(texte, marge_min=2):
+    """Langue probable (fr, en, it, es, de, nl, pl, pt), ou None si elle ne se détache pas nettement."""
+    if not re.search(r"[^\W\d_]", texte):
+        return "fr"                      # emojis seuls : réponse en français
+    if re.search(ECRITURES["vietnamien"], texte):
+        return None                      # vietnamien : langue non gérée par ce détecteur
+    scores = scores_langues(texte)
+    mots = re.findall(r"[^\W\d_]+", texte)
+    # Mot international très court (« Wow », « Top », « Super »), sans aucun indice d'une autre langue :
+    # la Page étant francophone, on répond en français.
+    if len(mots) <= 2 and not any(scores.values()) and all(m.isascii() for m in mots):
+        return "fr"
     meilleur = max(scores, key=scores.get)
-    autres = sorted(scores.values(), reverse=True)
-    if scores[meilleur] == 0 or (len(autres) > 1 and autres[0] == autres[1]):
+    classement = sorted(scores.values(), reverse=True)
+    if classement[0] == 0:
+        return None
+    if classement[1] == 0:
+        return meilleur                  # une seule langue a des indices : pas d'ambiguïté
+    if classement[0] - classement[1] < marge_min and classement[0] < 2 * classement[1]:
         return None
     return meilleur
 
@@ -553,6 +573,7 @@ ECRITURES = {
     "grec": r"[\u0370-\u03ff]",
     "arabe": r"[\u0600-\u06ff]",
     "hébreu": r"[\u0590-\u05ff]",
+    "vietnamien": r"[ăđơưĂĐƠƯạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]",
 }
 
 
@@ -568,9 +589,10 @@ def probleme_langue(commentaire, reponse):
     langue = detecter_langue(commentaire)
     if not langue or not re.search(r"[^\W\d_]", commentaire):
         return ""
-    for phrase in _phrases(reponse) + [reponse]:
-        autre = detecter_langue(phrase)
-        if autre and autre != langue and len(re.findall(r"[^\W\d_]+", phrase)) >= 2:
+    for phrase in _phrases(reponse):
+        scores = scores_langues(phrase)
+        autre = max((lg for lg in scores if lg != langue), key=scores.get)
+        if scores[autre] >= 1 and scores[autre] >= scores[langue] + 1:
             return (f"phrase en {NOMS_LANGUES[autre]} alors que le commentaire est en {NOMS_LANGUES[langue]} : "
                     f"« {phrase[:60]} »")
     return ""
