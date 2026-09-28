@@ -486,6 +486,12 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
         + f", angle n°{random.randint(1, 9)}, longueur de la phrase : {random.choice(['courte', 'développée'])}, "
         f"forme : {forme}, marqueur de l'oral : {marqueur}, cœur 🤎 : {random.choice(['oui', 'non'])}."
     )
+    contexte.append(
+        "LANGUE (obligatoire) : écris toute la réponse dans la langue du commentaire ci-dessus "
+        "(italien → italien, anglais → anglais, allemand → allemand, etc.), en traduisant l'idée du "
+        "remerciement et de l'angle tirés au sort. Le français seulement si le commentaire est en français "
+        "ou fait uniquement d'emojis."
+    )
 
     consignes = CONSIGNES_SYSTEME + "\n\n# Consignes propres à la Page\n\n" + ton
     texte = appeler_ia(consignes, "\n\n".join(contexte))
@@ -539,10 +545,10 @@ def resume_github(lignes):
     if not chemin or not lignes:
         return
     with open(chemin, "a", encoding="utf-8") as f:
-        f.write("| Action | Commentaire | Réponse |\n|---|---|---|\n")
-        for action, com, rep in lignes:
-            nettoyer = lambda s: (s or "").replace("|", "/").replace("\n", " ")[:150]
-            f.write(f"| {action} | {nettoyer(com)} | {nettoyer(rep)} |\n")
+        f.write("| Action | Commentaire | Réponse | Raison |\n|---|---|---|---|\n")
+        for action, com, rep, raison in lignes:
+            nettoyer = lambda s: (s or "").replace("|", "/").replace("\n", " ")[:400]
+            f.write(f"| {action} | {nettoyer(com)} | {nettoyer(rep)} | {nettoyer(raison)} |\n")
 
 
 def main():
@@ -665,7 +671,7 @@ def main():
 
             if action == "repondre":
                 reponses_recentes.append(reponse)
-            journal.append((action, com.get("message"), reponse))
+            journal.append((action, com.get("message"), reponse, raison))
             if not MODE_TEST:
                 etat[cle] = {"date": maintenant, "action": action, "reponse": reponse}
 
