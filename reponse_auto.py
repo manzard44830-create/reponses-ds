@@ -469,6 +469,113 @@ MERCI_TEMOIGNAGE = [
     "Merci pour ce partage.", "Merci d'avoir raconté ce souvenir.", "Merci pour ce beau témoignage.",
     "Merci à vous d'avoir partagé ce moment.", "Merci pour ces beaux souvenirs.", "Merci de l'avoir raconté.",
 ]
+NOMS_LANGUES = {"fr": "français", "en": "anglais", "it": "italien", "es": "espagnol", "de": "allemand",
+               "nl": "néerlandais", "pl": "polonais", "pt": "portugais"}
+MOTS_LANGUES = {
+    "fr": "la le les un une des de et est je tu il elle nous vous on que qui pas ce cette mon ma mes du au aux avec "
+          "pour dans sur très était magnifique superbe sublime splendide classe belle beau beauté déesse merveille "
+          "merveilleux souvenirs souvenir adore voiture bagnole quel quelle quels quelles relique merci remercie "
+          "plaisir content ravi gentil touche sympa fier fierté volant balade bichonne sortie sorties privilège "
+          "conduire chaque toujours reste vraiment elle lui leur ça",
+    "it": "il lo la le gli un una e è che di del della per con non mi ti sono era questo questa molto quanti quanto "
+          "bella bellissima bellissimo meraviglia ricordi ricordo macchina grazie ringrazio piacere contento gentile "
+          "cuore leggerlo allegria orgoglio guidare guido strada ogni volta sempre ho mio mia lei ero stato stata dal "
+          "nel nella alla sul sulla anche ma più oggi quando come",
+    "en": "the an and is it this that was my i you of to in with very so beautiful car love great what thank "
+          "thanks glad lovely kind her she always every drive proud pleasure",
+    "es": "el la los las un una y es de por con muy mi preciosa precioso hermoso hermosa coche qué recuerdos "
+          "gracias agradezco alegra amable corazón encantado placer orgullo siempre cada que le guste gusta tanto "
+          "haga ese esta este también",
+    "de": "der die das und ist ein eine nicht ich mit sehr schön schöne auto wunderschön danke dank freut "
+          "herzlichen vielen nett immer sie ihnen",
+    "nl": "de het een van niet ik met zeer mooi mooie prachtig nog dank bedankt fijn leuk wat u ze",
+    "pt": "os um uma e é de com muito meu minha lindo linda carro que obrigado agradeço feliz gentileza sempre",
+    "pl": "w z na nie jest to że bardzo piękny piękna samochód się dziękuję dzięki miło cieszę",
+}
+MOTS_LANGUES = {k: set(v.split()) for k, v in MOTS_LANGUES.items()}
+
+
+def detecter_langue(texte):
+    """Langue probable du commentaire (fr, en, it, es, de, nl, pl, pt), ou None si incertain."""
+    if not re.search(r"[^\W\d_]", texte):
+        return "fr"                      # emojis seuls : réponse en français
+    bas = texte.lower().replace("’", "'")
+    mots = re.findall(r"[^\W\d_]+", bas)
+    scores = {lg: sum(1 for m in mots if m in vocab) for lg, vocab in MOTS_LANGUES.items()}
+    scores["fr"] += 2 * len(re.findall(r"\b(c|j|l|d|qu|n|m|s)'", bas))   # élisions françaises
+    if re.search(r"[ąćęłńśźż]", bas):
+        scores["pl"] += 2
+    if re.search(r"[¡¿ñ]", bas):
+        scores["es"] += 2
+    if re.search(r"[ãõ]", bas):
+        scores["pt"] += 2
+    if re.search(r"[ßäöü]", bas):
+        scores["de"] += 1
+    meilleur = max(scores, key=scores.get)
+    autres = sorted(scores.values(), reverse=True)
+    if scores[meilleur] == 0 or (len(autres) > 1 and autres[0] == autres[1]):
+        return None
+    return meilleur
+
+
+def lire_listes(ton):
+    """Lit dans la fiche les listes numérotées de remerciements, pour donner la formule exacte à l'IA."""
+    def liste_apres(titre):
+        i = ton.find(titre)
+        if i < 0:
+            return []
+        items = []
+        for ligne in ton[i:].splitlines()[1:]:
+            m = re.match(r"\s*\d+\.\s*«\s*(.+?)\s*»", ligne)
+            if m:
+                items.append(m.group(1))
+            elif items and ligne.strip() and not ligne.strip().startswith(("Dans une autre", "Un souvenir")):
+                break
+            elif items and not ligne.strip():
+                break
+        return items
+    listes = {"emojis": liste_apres("**Remerciements légers pour les emojis**"),
+              "fr": liste_apres("**Remerciements pour les compliments en mots**"),
+              "temoignage": liste_apres("**Exception : souvenir développé.**")}
+    codes = {"Anglais": "en", "Italien": "it", "Espagnol": "es", "Allemand": "de",
+             "Néerlandais": "nl", "Polonais": "pl", "Portugais": "pt"}
+    for nom, code in codes.items():
+        m = re.search(rf"^- {nom} : (.+)$", ton, re.M)
+        if m:
+            listes[code] = re.findall(r"\d+\.\s*«\s*(.+?)\s*»", m.group(1))
+    return listes
+
+
+ECRITURES = {
+    "japonais ou chinois": r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]",
+    "coréen": r"[\uac00-\ud7af]",
+    "cyrillique": r"[\u0400-\u04ff]",
+    "grec": r"[\u0370-\u03ff]",
+    "arabe": r"[\u0600-\u06ff]",
+    "hébreu": r"[\u0590-\u05ff]",
+}
+
+
+def probleme_langue(commentaire, reponse):
+    """Renvoie une description du problème si la réponse n'est pas dans la langue du commentaire, sinon ''."""
+    for nom, motif in ECRITURES.items():
+        dans_com = len(re.findall(motif, commentaire)) >= 2
+        dans_rep = bool(re.search(motif, reponse))
+        if dans_com and not dans_rep:
+            return f"commentaire en {nom}, réponse sans cette écriture"
+        if dans_rep and not dans_com:
+            return f"réponse en {nom} alors que le commentaire ne l'est pas"
+    langue = detecter_langue(commentaire)
+    if not langue or not re.search(r"[^\W\d_]", commentaire):
+        return ""
+    for phrase in _phrases(reponse) + [reponse]:
+        autre = detecter_langue(phrase)
+        if autre and autre != langue and len(re.findall(r"[^\W\d_]+", phrase)) >= 2:
+            return (f"phrase en {NOMS_LANGUES[autre]} alors que le commentaire est en {NOMS_LANGUES[langue]} : "
+                    f"« {phrase[:60]} »")
+    return ""
+
+
 MOTS_FRANCAIS = re.compile(r"\b(je|j'|le|la|les|une|des|et|avec|dans|pour|que|qui|est|était|mon|ma|mes|nous|on)\b", re.I)
 
 
@@ -523,26 +630,42 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
         marqueur = "aucun"   # jamais de marqueur après un merci seul
     else:
         marqueur = f"n°{random.randint(1, 11 if forme == 'première personne' else 5)}"
+    langue = detecter_langue(texte_com)
+    listes = lire_listes(ton)
+    n_merci = random.randint(1, 15)
+    liste_merci = listes["emojis"] if emoji_seul else listes.get(langue or "fr") or listes["fr"]
+    if liste_merci and n_merci <= len(liste_merci) and (emoji_seul or langue in listes):
+        merci = f"remerciement à utiliser, tel quel : « {liste_merci[n_merci - 1]} »"
+    else:
+        equivalents = [f"{NOMS_LANGUES[lg]} : « {listes[lg][n_merci - 1]} »"
+                       for lg in ("fr", "en", "it", "es", "de", "nl", "pl", "pt")
+                       if lg in listes and len(listes[lg]) >= n_merci]
+        merci = ("remerciement : prends, TEL QUEL, celui de la langue du commentaire parmi "
+                 + " ; ".join(equivalents) + " (autre langue : exprime la version française dans cette langue)")
     contexte.append(
         "Tirage de variété (à suivre SEULEMENT si le commentaire est un compliment adressé à cette voiture, "
         "à la vidéo ou à la Page, ou un emoji de compliment ; sinon AUCUN remerciement, ignore ce tirage) : "
-        f"remerciement n°{random.randint(1, 15)} de la liste « {'emojis' if emoji_seul else 'compliments'} », "
+        f"{merci}, "
         + ("merci seul (ne rien ajouter après le merci, sauf pour un compliment long)"
            if merci_seul else "merci suivi d'une phrase")
         + f", angle n°{random.randint(1, 9)}, longueur de la phrase : {random.choice(['courte', 'développée'])}, "
         f"forme : {forme}, marqueur de l'oral : {marqueur}, cœur 🤎 : {random.choice(['oui', 'non'])}."
     )
+    fin = random.choice(listes["temoignage"]) if listes["temoignage"] else "Merci pour ce témoignage."
     contexte.append(
-        f"Si le commentaire est un souvenir personnel développé : phrase finale de remerciement n°{random.randint(1, 12)} "
-        "de la liste « Exception : souvenir développé »."
+        "Si le commentaire est un souvenir personnel développé : phrase finale de remerciement "
+        + (f"« {fin} »." if langue == "fr" else f"« {fin} », exprimée simplement dans la langue du commentaire.")
     )
-    contexte.append(
-        "LANGUE (obligatoire) : écris toute la réponse dans la langue du commentaire ci-dessus "
-        "(italien → italien, anglais → anglais, allemand → allemand, etc.). Pour le remerciement, prends la "
-        "formule du numéro tiré dans la liste de cette langue (« Remerciements dans les autres langues ») ; "
-        "si la langue n'y figure pas, exprime naturellement la formule française de ce numéro. Traduis aussi "
-        "l'idée de l'angle. Le français seulement si le commentaire est en français ou fait uniquement d'emojis."
-    )
+    if langue:
+        contexte.append(
+            f"LANGUE (obligatoire) : le commentaire est en {NOMS_LANGUES[langue]}. Écris TOUTE la réponse en "
+            f"{NOMS_LANGUES[langue]}, sans aucun mot d'une autre langue."
+        )
+    else:
+        contexte.append(
+            "LANGUE (obligatoire) : écris TOUTE la réponse dans la langue du commentaire ci-dessus, sans mélanger "
+            "deux langues. Le français seulement si le commentaire est en français."
+        )
 
     consignes = CONSIGNES_SYSTEME + "\n\n# Consignes propres à la Page\n\n" + ton
     texte = appeler_ia(consignes, "\n\n".join(contexte))
@@ -568,9 +691,29 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
             decision["reponse"] = retirer_remerciements(decision.get("reponse") or "", sauf_fin=temoignage)
     action = decision.get("action")
     reponse = (decision.get("reponse") or "").strip()
+    # Langue : la réponse doit être entièrement dans la langue du commentaire.
+    # Sinon, on redemande une fois ; si c'est encore faux, on ne publie rien.
+    if action == "repondre" and reponse and not emoji_seul:
+        probleme = probleme_langue(texte_commentaire, reponse)
+        if probleme:
+            log(f"    ↺ Mauvaise langue ({probleme}) : nouvelle demande")
+            texte3 = appeler_ia(consignes, "\n\n".join(contexte) + "\n\nATTENTION : ta réponse n'était pas "
+                                f"entièrement dans la langue du commentaire ({probleme}). Réécris-la ENTIÈREMENT "
+                                "dans la langue du commentaire, sans un seul mot d'une autre langue.")
+            try:
+                d3 = extraire_json(texte3)
+            except ValueError:
+                d3 = {}
+            r3 = (d3.get("reponse") or "").strip()
+            if d3.get("action") == "repondre" and r3 and not probleme_langue(texte_commentaire, r3):
+                reponse = retirer_remerciements(r3, sauf_fin=temoignage) if d3.get("compliment") is False else r3
+            elif d3.get("action") in ("liker", "ignorer"):
+                action, reponse = d3["action"], ""
+            else:
+                return "ignorer", "", f"réponse non publiée : pas dans la langue du commentaire ({probleme})"
     # Souvenir développé en français : garantir la phrase finale de remerciement si l'IA l'a oubliée
     if action == "repondre" and reponse and temoignage and not decision.get("compliment") \
-            and len(MOTS_FRANCAIS.findall(texte_commentaire)) >= 3 \
+            and detecter_langue(texte_commentaire) == "fr" \
             and not REMERCIEMENT.search(_phrases(reponse)[-1]):
         reponse = reponse.rstrip() + " " + random.choice(MERCI_TEMOIGNAGE)
     if action not in ("repondre", "liker", "ignorer"):
