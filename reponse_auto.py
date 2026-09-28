@@ -488,9 +488,10 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
     )
     contexte.append(
         "LANGUE (obligatoire) : écris toute la réponse dans la langue du commentaire ci-dessus "
-        "(italien → italien, anglais → anglais, allemand → allemand, etc.), en traduisant l'idée du "
-        "remerciement et de l'angle tirés au sort. Le français seulement si le commentaire est en français "
-        "ou fait uniquement d'emojis."
+        "(italien → italien, anglais → anglais, allemand → allemand, etc.). Pour le remerciement, prends la "
+        "formule du numéro tiré dans la liste de cette langue (« Remerciements dans les autres langues ») ; "
+        "si la langue n'y figure pas, exprime naturellement la formule française de ce numéro. Traduis aussi "
+        "l'idée de l'angle. Le français seulement si le commentaire est en français ou fait uniquement d'emojis."
     )
 
     consignes = CONSIGNES_SYSTEME + "\n\n# Consignes propres à la Page\n\n" + ton
