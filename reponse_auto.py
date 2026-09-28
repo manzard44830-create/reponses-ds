@@ -459,7 +459,6 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
     tags = [t.get("name") for t in commentaire.get("message_tags") or [] if t.get("name")]
 
     contexte = [
-        f"Texte de la vidéo : {video['texte'][:800] or '(aucun texte)'}",
         f"Prénom de l'auteur : {prenom or '(inconnu)'}",
         f"Personnes taguées dans le commentaire : {', '.join(tags) if tags else 'aucune'}",
         f"Pièce jointe : {piece or 'aucune'}",
@@ -470,6 +469,23 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
             "Réponses déjà publiées récemment (ne les répète pas, varie) :\n- "
             + "\n- ".join(reponses_recentes[-8:])
         )
+    # Tirage au sort pour varier les réponses aux compliments (listes numérotées dans la fiche)
+    texte_com = commentaire.get("message") or ""
+    emoji_seul = bool(texte_com.strip()) and not re.search(r"[^\W_]", texte_com)
+    merci_seul = emoji_seul or random.random() < 0.5   # emoji de compliment : toujours un merci seul
+    forme = random.choice(["première personne", "impersonnelle"])
+    if merci_seul or random.random() < 0.5:
+        marqueur = "aucun"   # jamais de marqueur après un merci seul
+    else:
+        marqueur = f"n°{random.randint(1, 11 if forme == 'première personne' else 5)}"
+    contexte.append(
+        "Tirage de variété (à suivre SEULEMENT si le commentaire est un compliment ou un emoji de compliment) : "
+        f"remerciement n°{random.randint(1, 15)} de la liste « {'emojis' if emoji_seul else 'compliments'} », "
+        + ("merci seul (ne rien ajouter après le merci, sauf pour un compliment long)"
+           if merci_seul else "merci suivi d'une phrase")
+        + f", angle n°{random.randint(1, 9)}, longueur de la phrase : {random.choice(['courte', 'développée'])}, "
+        f"forme : {forme}, marqueur de l'oral : {marqueur}, cœur 🤎 : {random.choice(['oui', 'non'])}."
+    )
 
     consignes = CONSIGNES_SYSTEME + "\n\n# Consignes propres à la Page\n\n" + ton
     texte = appeler_ia(consignes, "\n\n".join(contexte))
@@ -483,6 +499,13 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
         raise ErreurIA(f"Action inattendue : {action!r}")
     if action == "repondre" and not reponse:
         action = "liker"
+    # Emoji de compliment : une fois sur deux, simple like sans réponse ;
+    # sinon, une fois sur deux, pas de point d'exclamation à la fin du merci.
+    if emoji_seul and action == "repondre":
+        if random.random() < 0.5:
+            return "liker", "", "emoji de compliment : simple like cette fois (tirage 1 sur 2)"
+        if random.random() < 0.5 and "¡" not in reponse:
+            reponse = re.sub(r"\s*!\s*(🤎)?\s*$", lambda m: " 🤎" if m.group(1) else "", reponse).strip()
     if len(reponse) > LONGUEUR_MAX_REPONSE:
         reponse = reponse[:LONGUEUR_MAX_REPONSE].rsplit(" ", 1)[0] + "…"
     return action, reponse, decision.get("raison", "")
