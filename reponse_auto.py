@@ -626,6 +626,48 @@ def retirer_remerciements(texte, sauf_fin=False):
     return " ".join(gardees).strip()
 
 
+TAILLE_SEQUENCE = 5   # 5 mots identiques à la suite = phrase recopiée
+
+
+def _mots(texte):
+    return re.findall(r"[^\W_]+", texte.lower().replace("’", "'"))
+
+
+def _sequences(texte):
+    m = _mots(texte)
+    return {tuple(m[i:i + TAILLE_SEQUENCE]) for i in range(len(m) - TAILLE_SEQUENCE + 1)}
+
+
+def formules_autorisees(listes):
+    """Formules à reprendre telles quelles (remerciements) : elles ne comptent pas comme des répétitions."""
+    return {" ".join(_mots(f)) for liste in listes.values() for f in liste}
+
+
+def exemples_fiche(ton, autorisees):
+    """Phrases d'exemple de la fiche, à ne jamais recopier mot pour mot."""
+    exemples = []
+    for bloc in re.findall(r"«\s*([^»]{15,}?)\s*»", ton):
+        for phrase in _phrases(bloc):
+            if " ".join(_mots(phrase)) not in autorisees and len(_mots(phrase)) >= TAILLE_SEQUENCE:
+                exemples.append(phrase)
+    return exemples
+
+
+def phrase_repetee(reponse, deja_vues, autorisees):
+    """Renvoie la première phrase de la réponse qui reprend 5 mots d'affilée d'un texte déjà vu, sinon ''."""
+    interdit = set()
+    for texte in deja_vues:
+        for phrase in _phrases(texte):
+            if " ".join(_mots(phrase)) not in autorisees:
+                interdit |= _sequences(phrase)
+    for phrase in _phrases(reponse):
+        if " ".join(_mots(phrase)) in autorisees:
+            continue
+        if _sequences(phrase) & interdit:
+            return phrase
+    return ""
+
+
 def decider_reponse(ton, video, commentaire, reponses_recentes):
     auteur = (commentaire.get("from") or {}).get("name", "")
     prenom = auteur.split(" ")[0] if auteur else ""
@@ -641,7 +683,7 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
     if reponses_recentes:
         contexte.append(
             "Réponses déjà publiées récemment (ne les répète pas, varie) :\n- "
-            + "\n- ".join(reponses_recentes[-8:])
+            + "\n- ".join(reponses_recentes[-10:])
         )
     # Tirage au sort pour varier les réponses aux compliments (listes numérotées dans la fiche)
     texte_com = commentaire.get("message") or ""
@@ -713,6 +755,27 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
             decision["reponse"] = retirer_remerciements(decision.get("reponse") or "", sauf_fin=temoignage)
     action = decision.get("action")
     reponse = (decision.get("reponse") or "").strip()
+    # Répétition : aucune phrase recopiée d'une réponse récente ni d'un exemple de la fiche.
+    if action == "repondre" and reponse and not emoji_seul:
+        autorisees = formules_autorisees(listes)
+        deja_vues = list(reponses_recentes) + exemples_fiche(ton, autorisees)
+        repetee = phrase_repetee(reponse, deja_vues, autorisees)
+        if repetee:
+            log(f"    ↺ Phrase déjà utilisée ou recopiée d'un exemple (« {repetee[:60]} ») : nouvelle demande")
+            texte4 = appeler_ia(consignes, "\n\n".join(contexte) + f"\n\nATTENTION : la phrase « {repetee} » "
+                                "a déjà été utilisée ou vient mot pour mot d'un exemple. Écris une réponse "
+                                "entièrement nouvelle, avec d'autres mots et une autre idée, en respectant "
+                                "toutes les autres consignes.")
+            try:
+                d4 = extraire_json(texte4)
+            except ValueError:
+                d4 = {}
+            r4 = (d4.get("reponse") or "").strip()
+            if d4.get("action") == "repondre" and r4 and not probleme_langue(texte_commentaire, r4):
+                if d4.get("compliment") is False:
+                    r4 = retirer_remerciements(r4, sauf_fin=temoignage)
+                if r4:
+                    reponse = r4
     # Langue : la réponse doit être entièrement dans la langue du commentaire.
     # Sinon, on redemande une fois ; si c'est encore faux, on ne publie rien.
     if action == "repondre" and reponse and not emoji_seul:
@@ -822,7 +885,7 @@ def main():
     publications = 0
     appels_ia = 0
     quota_atteint = False
-    reponses_recentes = [v["reponse"] for v in etat.values() if v.get("reponse")][-8:]
+    reponses_recentes = [v["reponse"] for v in etat.values() if v.get("reponse")][-60:]
     journal = []
     vus = set()
 
