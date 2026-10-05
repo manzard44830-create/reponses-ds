@@ -6,7 +6,7 @@
 
 « Réponse DS » est une application privée utilisée uniquement par la Page Facebook **Mémoire Auto**, pour gérer les commentaires publiés sous ses propres vidéos. Elle n'est proposée à aucun autre utilisateur ni à aucune autre Page.
 
-Responsable : Maxence Kot, administrateur de la Page Mémoire Auto.
+Responsable : administrateur de la Page Mémoire Auto.
 Contact : **memoireautods@gmail.com** ou par message privé à la Page Facebook Mémoire Auto.
 
 ## Données utilisées
