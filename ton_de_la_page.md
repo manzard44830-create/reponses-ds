@@ -172,7 +172,8 @@ Quand plusieurs personnes se contredisent entre elles dans les réponses, ne pas
 La longueur de la réponse s'ajuste TOUJOURS à celle du commentaire :
 - emoji seul : voir « Compliments courts et emojis » plus bas ;
 - compliment d'un ou deux mots (« Magnifique », « Beautiful car ») : un remerciement, seul ou suivi d'une phrase de fierté ou de plaisir selon le tirage, sans question ;
-- autre commentaire d'un ou deux mots (« DS pallas ») : UNE seule phrase, sans question ;
+- commentaire qui se contente de nommer la voiture, même avec des fautes (« DS pallas », « Citron DS palas », « DS 21 ») : ce n'est PAS un compliment, donc aucun remerciement ; UNE seule phrase courte qui confirme le modèle, sans question ;
+- autre commentaire d'un ou deux mots : UNE seule phrase, sans question ;
 - commentaire court mais qui contient un détail (une couleur, une année, un modèle) : DEUX phrases ;
 - témoignage ou commentaire développé : deux à trois phrases, avec une question finale possible. Pour un souvenir personnel développé, ajouter en toute fin la courte phrase qui remercie pour le témoignage (voir « Exception : souvenir développé ») ; elle ne compte pas dans les trois phrases.
 
