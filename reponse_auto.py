@@ -739,6 +739,7 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
     texte_com = commentaire.get("message") or ""
     emoji_seul = bool(texte_com.strip()) and not re.search(r"[^\W_]", texte_com)
     merci_seul = emoji_seul or random.random() < 0.5   # emoji de compliment : toujours un merci seul
+    longueur = random.choice(["courte", "développée"])
     forme = random.choice(["première personne", "impersonnelle"])
     langue = detecter_langue(texte_com)
     if merci_seul or langue != "fr" or random.random() < 0.5:
@@ -764,7 +765,7 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
         f"{merci}, "
         + ("merci seul (ne rien ajouter après le merci, sauf pour un compliment long)"
            if merci_seul else "merci suivi d'une phrase")
-        + f", angle n°{random.randint(1, 9)}, longueur de la phrase : {random.choice(['courte', 'développée'])}, "
+        + f", angle n°{random.randint(1, 9)}, longueur de la phrase : {longueur} (UNE seule phrase, même développée), "
         f"forme : {forme}, marqueur de l'oral : {marqueur}, cœur 🤎 : {random.choice(['oui', 'non'])}."
     )
     fin = random.choice(listes["temoignage"]) if listes["temoignage"] else "Merci pour ce témoignage."
@@ -861,6 +862,17 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
                 action, reponse = d3["action"], ""
             else:
                 return "ignorer", "", f"réponse non publiée : pas dans la langue du commentaire ({probleme})"
+    # Compliment court : le tirage décide de la longueur, et le programme la fait respecter.
+    # Merci seul -> 1 phrase ; merci + phrase -> 2 phrases au maximum ; phrase courte -> 90 caractères au plus.
+    mots_com = re.findall(r"[^\W\d_]+", texte_commentaire)
+    if action == "repondre" and reponse and decision.get("compliment") and not temoignage \
+            and not emoji_seul and len(mots_com) <= 6:
+        coeur = reponse.rstrip().endswith("🤎")
+        phrases = _phrases(reponse.replace("🤎", "").strip())
+        garde = phrases[:1] if merci_seul else phrases[:2]
+        if not merci_seul and longueur == "courte" and len(garde) == 2 and len(garde[1]) > 90:
+            garde = garde[:1]            # phrase « courte » trop longue : on garde le merci seul
+        reponse = " ".join(garde).strip() + (" 🤎" if coeur else "")
     # Commentaire qui nomme seulement la voiture : une seule phrase, sans remerciement
     if nom_voiture and action == "repondre" and reponse:
         phrases = [p for p in _phrases(reponse) if not REMERCIEMENT.search(p)]
