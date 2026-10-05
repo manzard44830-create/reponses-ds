@@ -34,7 +34,8 @@ Variables optionnelles (valeurs par défaut entre parenthèses) :
   FICHIER_ETAT                 Mémoire des commentaires traités (etat.json)
   PAUSE_PUBLICATION_MIN        Pause minimale entre deux publications, en secondes (3)
   PAUSE_PUBLICATION_MAX        Pause maximale entre deux publications, en secondes (8)
-  DELAI_MIN_COMMENTAIRE_MINUTES  Ne répond pas aux commentaires plus récents que N minutes (0)
+  DELAI_MIN_COMMENTAIRE_MINUTES  Délai minimal avant de répondre à un commentaire, en minutes (0)
+  DELAI_MAX_COMMENTAIRE_MINUTES  Délai maximal : chaque commentaire reçoit un délai tiré au hasard entre MIN et MAX (= MIN)
 """
 
 import json
@@ -111,7 +112,15 @@ PAUSE_ENTRE_PUBLICATIONS = (float(env("PAUSE_PUBLICATION_MIN", "3")),
 if PAUSE_ENTRE_PUBLICATIONS[1] < PAUSE_ENTRE_PUBLICATIONS[0]:
     PAUSE_ENTRE_PUBLICATIONS = (PAUSE_ENTRE_PUBLICATIONS[0], PAUSE_ENTRE_PUBLICATIONS[0])
 # Délai minimal avant de répondre : une réponse à la seconde près fait « robot »
-DELAI_MIN_COMMENTAIRE = timedelta(minutes=float(env("DELAI_MIN_COMMENTAIRE_MINUTES", "0")))
+DELAI_MIN_COMMENTAIRE = float(env("DELAI_MIN_COMMENTAIRE_MINUTES", "0"))
+DELAI_MAX_COMMENTAIRE = max(DELAI_MIN_COMMENTAIRE, float(env("DELAI_MAX_COMMENTAIRE_MINUTES", str(DELAI_MIN_COMMENTAIRE))))
+
+
+def delai_du_commentaire(cle):
+    """Délai propre à chaque commentaire, tiré entre MIN et MAX (toujours le même d'un passage à l'autre)."""
+    import hashlib
+    tirage = int(hashlib.md5(str(cle).encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
+    return timedelta(minutes=DELAI_MIN_COMMENTAIRE + tirage * (DELAI_MAX_COMMENTAIRE - DELAI_MIN_COMMENTAIRE))
 LONGUEUR_MAX_REPONSE = 400
 
 
@@ -898,82 +907,88 @@ def main():
         return 1
     log(f"{len(videos)} vidéo(s) récente(s) trouvée(s).")
 
+    # 1. Rassembler tous les commentaires en attente, sur toutes les vidéos
+    candidats = []
     for video in videos:
-        if publications >= MAX_REPONSES or quota_atteint:
-            break
         try:
             commentaires = recuperer_commentaires(video["id"])
         except ErreurGraph as e:
             log(f"  ⚠️ Commentaires illisibles pour {video['id']} : {e}")
             continue
-
         for com in commentaires:
-            if publications >= MAX_REPONSES:
-                log(f"Plafond de {MAX_REPONSES} publications atteint, suite à la prochaine exécution.")
-                break
             cle = cle_commentaire(com["id"])
             if cle in vus or cle in etat:
                 continue
-            if DELAI_MIN_COMMENTAIRE and date_fb(com["created_time"]) > datetime.now(timezone.utc) - DELAI_MIN_COMMENTAIRE:
-                continue  # trop récent : il sera traité à l'exécution suivante
             vus.add(cle)
             if (com.get("from") or {}).get("id") == PAGE_ID:
                 continue  # commentaire de la Page elle-même
+            if date_fb(com["created_time"]) > datetime.now(timezone.utc) - delai_du_commentaire(cle):
+                continue  # trop récent : il sera traité à un passage suivant
+            candidats.append((video, com, cle))
 
+    # 2. Les plus anciens d'abord : aucun commentaire ne reste en attente derrière des plus récents
+    candidats.sort(key=lambda vc: vc[1]["created_time"])
+    log(f"{len(candidats)} commentaire(s) prêt(s) à traiter.")
+
+    for video, com, cle in candidats:
+        if publications >= MAX_REPONSES or quota_atteint:
+            if publications >= MAX_REPONSES:
+                log(f"Plafond de {MAX_REPONSES} publications atteint, suite au prochain passage.")
+            break
+        try:
+            if page_a_deja_repondu(com):
+                etat[cle] = {"date": maintenant, "action": "deja_repondu"}
+                continue
+        except ErreurGraph as e:
+            log(f"  ⚠️ Vérification des réponses impossible pour {com['id']} : {e}")
+            continue
+
+        try:
+            if PAUSE_ENTRE_APPELS_IA and appels_ia:
+                time.sleep(PAUSE_ENTRE_APPELS_IA)
+            appels_ia += 1
+            action, reponse, raison = decider_reponse(ton, video, com, reponses_recentes)
+        except ErreurIA as e:
+            if e.quota:
+                log(f"  ⏸️ Quota de l'IA atteint : {e}")
+                log("     Les commentaires restants seront traités à la prochaine exécution.")
+                quota_atteint = True
+                break
+            log(f"  ⚠️ Décision IA impossible pour {com['id']} : {e}")
+            continue
+        except Exception as e:  # erreur inattendue : on réessaiera à la prochaine exécution
+            log(f"  ⚠️ Décision IA impossible pour {com['id']} : {e}")
+            continue
+
+        extrait = (com.get("message") or "").replace("\n", " ")[:80]
+        log(f"  💬 « {extrait} » → {action.upper()}" + (f" : {reponse}" if reponse else "")
+            + (f"  ({raison})" if raison else ""))
+
+        if not MODE_TEST:
             try:
-                if page_a_deja_repondu(com):
-                    etat[cle] = {"date": maintenant, "action": "deja_repondu"}
-                    continue
+                if LIKER and action in ("repondre", "liker"):
+                    try:
+                        graph("POST", f"{com['id']}/likes")
+                    except ErreurGraph as e:
+                        log(f"    (like impossible : {e})")
+                if action == "repondre":
+                    graph("POST", f"{com['id']}/comments", {"message": reponse})
+                    publications += 1
+                    time.sleep(random.uniform(*PAUSE_ENTRE_PUBLICATIONS))
             except ErreurGraph as e:
-                log(f"  ⚠️ Vérification des réponses impossible pour {com['id']} : {e}")
+                log(f"    ❌ Publication impossible : {e} (code {e.code})")
+                if e.code == 190:
+                    sauvegarder_etat(etat)
+                    return 1
                 continue
+        elif action == "repondre":
+            publications += 1
 
-            try:
-                if PAUSE_ENTRE_APPELS_IA and appels_ia:
-                    time.sleep(PAUSE_ENTRE_APPELS_IA)
-                appels_ia += 1
-                action, reponse, raison = decider_reponse(ton, video, com, reponses_recentes)
-            except ErreurIA as e:
-                if e.quota:
-                    log(f"  ⏸️ Quota de l'IA atteint : {e}")
-                    log("     Les commentaires restants seront traités à la prochaine exécution.")
-                    quota_atteint = True
-                    break
-                log(f"  ⚠️ Décision IA impossible pour {com['id']} : {e}")
-                continue
-            except Exception as e:  # erreur inattendue : on réessaiera à la prochaine exécution
-                log(f"  ⚠️ Décision IA impossible pour {com['id']} : {e}")
-                continue
-
-            extrait = (com.get("message") or "").replace("\n", " ")[:80]
-            log(f"  💬 « {extrait} » → {action.upper()}" + (f" : {reponse}" if reponse else "")
-                + (f"  ({raison})" if raison else ""))
-
-            if not MODE_TEST:
-                try:
-                    if LIKER and action in ("repondre", "liker"):
-                        try:
-                            graph("POST", f"{com['id']}/likes")
-                        except ErreurGraph as e:
-                            log(f"    (like impossible : {e})")
-                    if action == "repondre":
-                        graph("POST", f"{com['id']}/comments", {"message": reponse})
-                        publications += 1
-                        time.sleep(random.uniform(*PAUSE_ENTRE_PUBLICATIONS))
-                except ErreurGraph as e:
-                    log(f"    ❌ Publication impossible : {e} (code {e.code})")
-                    if e.code == 190:
-                        sauvegarder_etat(etat)
-                        return 1
-                    continue
-            elif action == "repondre":
-                publications += 1
-
-            if action == "repondre":
-                reponses_recentes.append(reponse)
-            journal.append((action, com.get("message"), reponse, raison))
-            if not MODE_TEST:
-                etat[cle] = {"date": maintenant, "action": action, "reponse": reponse}
+        if action == "repondre":
+            reponses_recentes.append(reponse)
+        journal.append((action, com.get("message"), reponse, raison))
+        if not MODE_TEST:
+            etat[cle] = {"date": maintenant, "action": action, "reponse": reponse}
 
     sauvegarder_etat(etat)
     resume_github(journal)
