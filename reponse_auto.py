@@ -487,7 +487,7 @@ MOTS_LANGUES = {
           "merveilleux souvenirs souvenir adore voiture bagnole quel quelle quels quelles relique merci remercie "
           "plaisir content ravi gentil touche sympa fier fierté volant balade bichonne sortie sorties privilège "
           "conduire chaque toujours reste vraiment elle lui leur ça non peu plus tout tous toute trop encore déjà "
-          "aussi comme mais où oui voilà sont avait avoir être fait faire cet ces son sa ses",
+          "aussi comme mais où oui voilà sont avait avoir être fait faire cet ces son sa ses faut",
     "it": "il lo la le gli un una e è che di del della per con non mi ti sono era questo questa molto quanti quanto "
           "bella bellissima bellissimo meraviglia ricordi ricordo macchina grazie ringrazio piacere contento gentile "
           "cuore leggerlo allegria orgoglio guidare guido strada ogni volta sempre ho mio mia lei ero stato stata dal "
@@ -590,6 +590,11 @@ ECRITURES = {
 }
 
 
+TOURNURES_FRANCAISES = re.compile(
+    r"\b(il faut dire|franchement|honnêtement|en tout cas|pour tout vous dire|je dois dire|je vous avoue|"
+    r"je ne vais pas vous mentir|je crois que|je me dis|merci|c'est|ça|très|vraiment|chaque|toujours)\b", re.I)
+
+
 def probleme_langue(commentaire, reponse, langue_declaree=None):
     """Renvoie une description du problème si la réponse n'est pas dans la langue du commentaire, sinon ''.
     langue_declaree : langue du commentaire indiquée par l'IA (code ISO), utilisée si le détecteur hésite."""
@@ -604,6 +609,11 @@ def probleme_langue(commentaire, reponse, langue_declaree=None):
         return ""
     declaree = (langue_declaree or "").strip().lower()[:2] or None
     langue = detecter_langue(commentaire) or (declaree if declaree in NOMS_LANGUES else None)
+    langue_non_fr = (langue and langue != "fr") or (not langue and declaree and declaree != "fr")
+    if langue_non_fr:
+        tournure = TOURNURES_FRANCAISES.search(reponse)
+        if tournure:
+            return f"mot français « {tournure.group(0)} » dans une réponse qui doit être en {NOMS_LANGUES.get(langue or declaree, declaree)}"
     if langue:
         for phrase in _phrases(reponse):
             scores = scores_langues(phrase)
@@ -730,11 +740,13 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
     emoji_seul = bool(texte_com.strip()) and not re.search(r"[^\W_]", texte_com)
     merci_seul = emoji_seul or random.random() < 0.5   # emoji de compliment : toujours un merci seul
     forme = random.choice(["première personne", "impersonnelle"])
-    if merci_seul or random.random() < 0.5:
-        marqueur = "aucun"   # jamais de marqueur après un merci seul
+    langue = detecter_langue(texte_com)
+    if merci_seul or langue != "fr" or random.random() < 0.5:
+        # jamais de marqueur après un merci seul, ni dans une autre langue que le français
+        # (les marqueurs de la fiche sont en français et l'IA les recopiait tels quels)
+        marqueur = "aucun"
     else:
         marqueur = f"n°{random.randint(1, 11 if forme == 'première personne' else 5)}"
-    langue = detecter_langue(texte_com)
     listes = lire_listes(ton)
     n_merci = random.randint(1, 15)
     liste_merci = listes["emojis"] if emoji_seul else listes.get(langue or "fr") or listes["fr"]
