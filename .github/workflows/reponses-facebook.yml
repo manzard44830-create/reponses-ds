@@ -1,13 +1,16 @@
 name: Réponses automatiques Facebook
 
-# Pourquoi une boucle : GitHub saute très souvent les tâches planifiées rapprochées.
-# Ici, il ne lance qu'une exécution toutes les 4 heures, et c'est cette exécution
-# qui relance le programme toutes les 10 minutes pendant 4 h 15, de l'intérieur.
-# Le recouvrement de 15 minutes garantit qu'une boucle prend toujours le relais.
+# Objectif : chaque commentaire reçoit sa réponse entre 2 h et 3 h après sa publication.
+#
+# GitHub saute souvent les lancements planifiés : on ne compte donc pas sur eux pour le rythme.
+# Chaque exécution reste allumée environ 5 h 30 et relance elle-même le programme
+# toutes les INTERVALLE_MINUTES (15 par défaut). Un lancement est demandé toutes les heures :
+# pendant qu'une boucle tourne, le suivant attend son tour (concurrency) et prend le relais
+# dès qu'elle se termine. Les lancements en surplus sont annulés automatiquement : c'est normal.
 
 on:
   schedule:
-    - cron: "7 */4 * * *"   # à 00h07, 04h07, 08h07, 12h07, 16h07 et 20h07 (UTC)
+    - cron: "7 * * * *"      # toutes les heures (les boucles se relaient)
   workflow_dispatch:         # bouton « Run workflow » : fait UN seul passage, tout de suite
     inputs:
       mode_test:
@@ -24,7 +27,7 @@ jobs:
     # Tant que MODE_TEST n'est pas à 0, seuls les tests lancés à la main fonctionnent.
     if: github.event_name != 'schedule' || vars.MODE_TEST == '0'
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
 
@@ -58,11 +61,13 @@ jobs:
           PAUSE_PUBLICATION_MIN: ${{ vars.PAUSE_PUBLICATION_MIN }}
           PAUSE_PUBLICATION_MAX: ${{ vars.PAUSE_PUBLICATION_MAX }}
           DELAI_MIN_COMMENTAIRE_MINUTES: ${{ vars.DELAI_MIN_COMMENTAIRE_MINUTES }}
+          DELAI_MAX_COMMENTAIRE_MINUTES: ${{ vars.DELAI_MAX_COMMENTAIRE_MINUTES }}
+          INTERVALLE_MINUTES: ${{ vars.INTERVALLE_MINUTES }}
           EVENEMENT: ${{ github.event_name }}
         run: |
           set -u
-          INTERVALLE=600          # 10 minutes entre deux passages
-          DUREE_BOUCLE=15300      # 4 h 15 de boucle, pour recouvrir le lancement suivant
+          INTERVALLE=$(( ${INTERVALLE_MINUTES:-15} * 60 ))   # temps entre deux passages
+          DUREE_BOUCLE=19800                                  # 5 h 30 de boucle (limite GitHub : 6 h)
 
           if [ "$EVENEMENT" != "schedule" ]; then
             echo "Lancement manuel : un seul passage."
@@ -78,9 +83,8 @@ jobs:
             echo "::group::Passage $PASSAGE — $(date -u '+%H:%M:%S UTC')"
             python3 reponse_auto.py || echo "⚠️ Passage $PASSAGE en erreur, la boucle continue."
             echo "::endgroup::"
-
             if [ $(date +%s) -ge $FIN ]; then
-              echo "Fin de la boucle après $PASSAGE passage(s). La prochaine prend le relais."
+              echo "Fin de la boucle après $PASSAGE passage(s). La suivante prend le relais."
               break
             fi
             RESTE=$(( INTERVALLE - ( $(date +%s) - DEBUT ) ))
