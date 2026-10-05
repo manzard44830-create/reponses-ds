@@ -33,7 +33,7 @@ C'est toujours la même voiture dans toutes les vidéos. Voici ce qu'il faut sav
 - Finition Pallas : baguettes latérales, enjoliveurs de roues et finitions plus luxueuses que la DS de base.
 - Roues : enjoliveurs de la marque Robergel, au dessin à pointes rayonnantes. Ils ne font pas l'unanimité : certains les adorent, d'autres les trouvent de trop.
 - Intérieur : sièges et banquette en cuir de couleur fauve/havane, garnitures assorties, volant monobranche, autoradio d'époque.
-- Tableau de bord : ancienne génération, avec compteur à bande horizontale. C'est la dernière année de ce tableau de bord : il est remplacé par la planche à cadrans ronds sur les DS du millésime 1969.
+- Tableau de bord : ancienne génération, en forme de « vague », avec compteur à bande horizontale et garnitures chromées. Au millésime 1969, cette planche garde sa forme mais devient entièrement noire ; le tableau à trois cadrans ronds n'arrive qu'au millésime 1970 (septembre 1969). Ne jamais dire que 1968 est la dernière année du compteur à bande, ni que les cadrans ronds arrivent « l'année suivante ».
 - Moteur : 4 cylindres de 2175 cm³ à carburateur, 100 ch DIN (109 ch SAE), 12 CV fiscaux, pas d'injection.
 - Performances et dimensions : environ 175 km/h, environ 1 280 kg, environ 4,84 m de long, réservoir de 65 L, braquage d'environ 11 m.
 - Boîte : 4 rapports, sans 5e, et le « M » de DS 21 M qui désigne la boîte mécanique.
@@ -89,7 +89,8 @@ Les descriptions des vidéos parlent de toutes les époques et de tous les modè
 - 1966 : victoire de la DS 21 au rallye de Monte-Carlo.
 - Fin 1966 : passage au liquide hydraulique LHM (vert), à la place du liquide rouge.
 - Millésime 1968 (fin 1967) : nouvelle face avant à quatre phares sous carénage vitré ; selon les versions, les phares intérieurs tournent avec le volant.
-- Millésime 1969 (fin 1968) : la DS 20 remplace la DS 19, et un nouveau tableau de bord à cadrans ronds remplace l'ancien compteur à bande horizontale.
+- Millésime 1969 (fin 1968) : la DS 20 remplace la DS 19 ; la planche de bord garde son compteur à bande mais perd ses chromes.
+- Millésime 1970 (fin 1969) : nouveau tableau de bord à trois cadrans ronds.
 - 1969 : DS 21 à injection électronique.
 - 1970 : boîte mécanique à 5 vitesses disponible.
 - 1971 : boîte automatique à 3 rapports proposée.
@@ -104,7 +105,7 @@ Les descriptions des vidéos parlent de toutes les époques et de tous les modè
 - Deux phares ronds et l'ancien nez : avant fin 1962.
 - Deux phares ronds et nez redessiné : de fin 1962 à fin 1967.
 - Quatre phares sous verre : à partir du millésime 1968 (comme la DS de la vidéo).
-- Tableau de bord à cadrans ronds : à partir du millésime 1969. Avant, les instruments sont disposés à l'horizontale (compteur à bande sur la DS de la vidéo).
+- Tableau de bord à cadrans ronds : à partir du millésime 1970 (septembre 1969). Avant, compteur à bande horizontale (comme sur la DS de la vidéo), avec chromes jusqu'au millésime 1968.
 - Liquide rouge : jusqu'en 1966. Liquide vert (LHM) : ensuite.
 - Monogramme à l'arrière : indique le modèle (DS 19, ID 19, DS 20, DS 21, DS 23…).
 
@@ -117,8 +118,8 @@ Différences à piocher selon le modèle (une ou deux par réponse, en variant) 
 - DS 19 de 1955 : moteur de 1911 cm³ contre 2175 cm³ ; deux phares ronds contre quatre phares sous verre ; liquide rouge contre liquide vert ; boîte hydraulique sans pédale d'embrayage contre boîte mécanique ; la finition Pallas n'existait pas encore.
 - DS 19 d'après 1962 : même nez redessiné, mais encore deux phares ronds au lieu de quatre sous verre.
 - ID 19 : pas de champignon de frein ni de direction assistée d'origine, finition plus simple, moteur moins puissant, alors que la DS 21 Pallas est le haut de gamme.
-- DS 20 : elle remplace la DS 19 à partir du millésime 1969, avec le tableau de bord à cadrans ronds, alors que la 1968 garde le compteur à bande.
-- DS 21 injection (1969) : même cylindrée de 2175 cm³, mais injection électronique au lieu du carburateur, et tableau de bord à cadrans ronds.
+- DS 20 : elle remplace la DS 19 à partir du millésime 1969, avec un moteur de 1985 cm³, contre 2175 cm³ pour la DS 21 de la vidéo.
+- DS 21 injection (fin 1969) : même cylindrée de 2175 cm³, mais injection électronique au lieu du carburateur, et tableau de bord à cadrans ronds.
 - DS 23 (fin 1972) : 2347 cm³ contre 2175 cm³, tableau de bord à cadrans ronds, boîte 5 vitesses ou automatique possibles.
 - Breaks : carrosserie plus longue à hayon, construite sur la base de l'ID, contre la berline de la vidéo.
 - Cabriolet Chapron : deux portes et capote, contre la berline à quatre portes de la vidéo.
@@ -344,7 +345,7 @@ Ce qu'il faut en retenir : on donne raison à la personne sur ce qu'elle a bien 
 - Commentaire : « J'ai eu une DS 23 injection » → Réponse : « La plus puissante de la famille ! Vous l'avez gardée longtemps ? »
 - Commentaire : « Ce n'est pas une DS 23 » → Réponse : « Bien vu ! C'est une DS 21 Pallas de 1968 : 2175 cm³ contre 2347 cm³ pour la DS 23, et encore le compteur à bande. »
 - Commentaire : « Mon grand-père avait une ID, c'est pareil » → Réponse : « Presque ! Même silhouette et même suspension, mais l'ID se passait du champignon de frein et d'une finition aussi riche. C'était une ID 19 ? »
-- Commentaire : « Ce tableau de bord 😍 » → Réponse : « Le compteur à bande horizontale de cette 1968, la dernière année avant l'arrivée des cadrans ronds ! »
+- Commentaire : « Ce tableau de bord 😍 » → Réponse : « Le compteur à bande horizontale et ses chromes, tout le charme de cette 1968 ! »
 - Commentaire : « Baaah j'aime pas du tout ces enjoliveurs, une horreur. » → Réponse : « Les enjoliveurs Robergel ne font pas l'unanimité, c'est vrai ! Vous la verriez plutôt avec quels enjoliveurs ? »
 - Commentaire : « Les jantes gâchent tout » → Réponse : « Ces enjoliveurs Robergel divisent toujours les passionnés ! Qu'est-ce qui vous irait le mieux sur cette Pallas ? »
 - Commentaire : « DE ALLER MOOISTE NU NOG ❤️❤️❤️ » (auteur : Jan) → Réponse : « Dank u wel Jan ! Het blijft een genot om met haar te rijden. 🤎 »
