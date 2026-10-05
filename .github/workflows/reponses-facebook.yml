@@ -2,20 +2,27 @@ name: Réponses automatiques Facebook
 
 # Objectif : chaque commentaire reçoit sa réponse entre 2 h et 3 h après sa publication.
 #
-# GitHub saute souvent les lancements planifiés : on ne compte donc pas sur eux pour le rythme.
-# Chaque exécution reste allumée environ 5 h 30 et relance elle-même le programme
-# toutes les INTERVALLE_MINUTES (15 par défaut). Un lancement est demandé toutes les heures :
-# pendant qu'une boucle tourne, le suivant attend son tour (concurrency) et prend le relais
-# dès qu'elle se termine. Les lancements en surplus sont annulés automatiquement : c'est normal.
+# Chaque exécution « boucle » reste allumée environ 5 h 30 et relance le programme toutes les
+# INTERVALLE_MINUTES (15 par défaut). À la fin, elle démarre ELLE-MÊME la boucle suivante :
+# la chaîne ne dépend plus des lancements planifiés de GitHub, qui sont souvent sautés.
+# Le lancement horaire ne sert plus que de filet de sécurité, si la chaîne s'arrêtait.
+# Pendant qu'une boucle tourne, les lancements en surplus attendent ou sont annulés : c'est normal.
+#
+# Démarrer : Actions > Run workflow > « boucle ». Arrêter : variable MODE_TEST à 1
+# (puis « Cancel workflow » sur la boucle en cours pour un arrêt immédiat).
 
 on:
   schedule:
-    - cron: "7 * * * *"      # toutes les heures (les boucles se relaient)
-  workflow_dispatch:         # bouton « Run workflow » : fait UN seul passage, tout de suite
+    - cron: "7 * * * *"      # filet de sécurité : relance la chaîne si elle s'est arrêtée
+  workflow_dispatch:
     inputs:
-      mode_test:
-        description: "Mode test (1 = affiche les réponses sans rien publier)"
-        default: "1"
+      lancement:
+        description: "test = un passage sans rien publier · boucle = démarre les réponses automatiques (MODE_TEST doit valoir 0)"
+        type: choice
+        options:
+          - test
+          - boucle
+        default: test
 
 concurrency:
   group: reponses-facebook
@@ -23,10 +30,12 @@ concurrency:
 
 jobs:
   repondre:
-    # Les boucles automatiques ne tournent que si MODE_TEST vaut 0.
-    # Tant que MODE_TEST n'est pas à 0, seuls les tests lancés à la main fonctionnent.
-    if: github.event_name != 'schedule' || vars.MODE_TEST == '0'
+    # Les boucles ne tournent que si MODE_TEST vaut 0. Les tests manuels tournent toujours (sans rien publier).
+    if: (github.event_name == 'workflow_dispatch' && inputs.lancement != 'boucle') || vars.MODE_TEST == '0'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write        # pour démarrer la boucle suivante
     timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
@@ -48,9 +57,8 @@ jobs:
           IA_API_KEY: ${{ secrets.IA_API_KEY }}
           IA_BASE_URL: ${{ vars.IA_BASE_URL }}
           FOURNISSEUR_IA: ${{ vars.FOURNISSEUR_IA }}
-          # Lancement manuel : valeur saisie. Boucle planifiée : variable MODE_TEST du dépôt.
-          # Sécurité : tant que la variable MODE_TEST=0 n'est pas créée, RIEN n'est publié.
-          MODE_TEST: ${{ github.event.inputs.mode_test || vars.MODE_TEST || '1' }}
+          # Test manuel : rien n'est publié. Boucle : variable MODE_TEST du dépôt.
+          MODE_TEST: ${{ (github.event_name == 'workflow_dispatch' && inputs.lancement != 'boucle') && '1' || vars.MODE_TEST || '1' }}
           MODELE_IA: ${{ vars.MODELE_IA }}
           MAX_REPONSES_PAR_EXECUTION: ${{ vars.MAX_REPONSES_PAR_EXECUTION }}
           AGE_MAX_VIDEO_JOURS: ${{ vars.AGE_MAX_VIDEO_JOURS }}
@@ -63,14 +71,14 @@ jobs:
           DELAI_MIN_COMMENTAIRE_MINUTES: ${{ vars.DELAI_MIN_COMMENTAIRE_MINUTES }}
           DELAI_MAX_COMMENTAIRE_MINUTES: ${{ vars.DELAI_MAX_COMMENTAIRE_MINUTES }}
           INTERVALLE_MINUTES: ${{ vars.INTERVALLE_MINUTES }}
-          EVENEMENT: ${{ github.event_name }}
+          BOUCLE: ${{ (github.event_name == 'schedule' || inputs.lancement == 'boucle') && '1' || '0' }}
         run: |
           set -u
           INTERVALLE=$(( ${INTERVALLE_MINUTES:-15} * 60 ))   # temps entre deux passages
           DUREE_BOUCLE=19800                                  # 5 h 30 de boucle (limite GitHub : 6 h)
 
-          if [ "$EVENEMENT" != "schedule" ]; then
-            echo "Lancement manuel : un seul passage."
+          if [ "$BOUCLE" != "1" ]; then
+            echo "Test manuel : un seul passage, rien n'est publié."
             python3 reponse_auto.py
             exit $?
           fi
@@ -97,3 +105,11 @@ jobs:
         with:
           path: etat.json
           key: etat-${{ github.run_id }}
+
+      - name: Démarrer la boucle suivante
+        if: success() && vars.MODE_TEST == '0' && (github.event_name == 'schedule' || inputs.lancement == 'boucle')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run reponses-facebook.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" -f lancement=boucle
+          echo "Boucle suivante demandée : elle démarre dès que celle-ci est terminée."
