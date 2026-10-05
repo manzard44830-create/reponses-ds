@@ -693,6 +693,21 @@ def phrase_repetee(reponse, deja_vues, autorisees):
     return ""
 
 
+MOTS_NOM_VOITURE = set("""citroen citron citroin cytroen citreon ds id pallas palas pallass palace 19 20 21 23 1968 68
+    la une un de du the a una il le m""".split())
+MOTS_MODELE = {"ds", "id", "pallas", "palas", "pallass", "palace", "citroen", "citron", "citroin", "cytroen", "citreon"}
+
+
+def nomme_la_voiture(texte):
+    """Vrai si le commentaire se contente de nommer la voiture (« Citron DS palas », « DS 21 Pallas »)."""
+    import unicodedata
+    sans_accents = "".join(ch for ch in unicodedata.normalize("NFD", texte.lower()) if unicodedata.category(ch) != "Mn")
+    if re.search(r"[\U0001F000-\U0001FAFF\u2600-\u27BF]", texte):
+        return False                     # avec un emoji (🔥, ❤️…), c'est plutôt une marque d'affection
+    mots = re.findall(r"[a-z]+|[0-9]+", sans_accents)
+    return 0 < len(mots) <= 6 and all(m in MOTS_NOM_VOITURE for m in mots) and any(m in MOTS_MODELE for m in mots)
+
+
 def decider_reponse(ton, video, commentaire, reponses_recentes):
     auteur = (commentaire.get("from") or {}).get("name", "")
     prenom = auteur.split(" ")[0] if auteur else ""
@@ -756,12 +771,25 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
             "deux langues. Le français seulement si le commentaire est en français."
         )
 
+    nom_voiture = nomme_la_voiture(texte_com)
+    if nom_voiture:
+        contexte = [ligne for ligne in contexte
+                    if not ligne.startswith(("Tirage de variété", "Si le commentaire est un souvenir"))]
+        contexte.append(
+            "Ce commentaire se contente de NOMMER la voiture : ce n'est PAS un compliment. Réponds par UNE seule "
+            "phrase courte qui confirme le modèle (une DS 21 Pallas de 1968), sans aucun remerciement, sans question, "
+            "sans détail supplémentaire."
+        )
+
     consignes = CONSIGNES_SYSTEME + "\n\n# Consignes propres à la Page\n\n" + ton
     texte = appeler_ia(consignes, "\n\n".join(contexte))
     if not texte.strip():
         raise ErreurIA("l'IA n'a rien renvoyé")
 
     decision = extraire_json(texte)
+    if nom_voiture:
+        decision["compliment"] = False
+        decision["temoignage"] = False
     # Pas de compliment => aucun remerciement : on redemande une fois, puis on retire les phrases de remerciement.
     texte_commentaire = commentaire.get("message") or ""
     temoignage = bool(decision.get("temoignage")) and len(re.findall(r"[^\W\d_]+", texte_commentaire)) >= MOTS_MIN_TEMOIGNAGE
@@ -821,6 +849,12 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
                 action, reponse = d3["action"], ""
             else:
                 return "ignorer", "", f"réponse non publiée : pas dans la langue du commentaire ({probleme})"
+    # Commentaire qui nomme seulement la voiture : une seule phrase, sans remerciement
+    if nom_voiture and action == "repondre" and reponse:
+        phrases = [p for p in _phrases(reponse) if not REMERCIEMENT.search(p)]
+        reponse = phrases[0] if phrases else ""
+        if not reponse:
+            action = "liker"
     # Souvenir développé en français : garantir la phrase finale de remerciement si l'IA l'a oubliée
     if action == "repondre" and reponse and temoignage and not decision.get("compliment") \
             and detecter_langue(texte_commentaire) == "fr" \
