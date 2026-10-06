@@ -1,0 +1,109 @@
+name: Réponses automatiques Facebook
+
+# Fonctionnement par VAGUES :
+#   1. une vague publie jusqu'à MAX_REPONSES_PAR_EXECUTION réponses (60 conseillé), espacées de
+#      PAUSE_PUBLICATION_MIN à PAUSE_PUBLICATION_MAX secondes (35 à 75 : environ une heure pour 60) ;
+#   2. puis une vraie pause, tirée au hasard entre PAUSE_VAGUE_MIN_MINUTES et PAUSE_VAGUE_MAX_MINUTES
+#      (120 à 150 par défaut : 2 h à 2 h 30) ;
+#   3. puis l'exécution démarre ELLE-MÊME la vague suivante : le rythme ne dépend pas des
+#      lancements planifiés de GitHub, qui sont souvent sautés.
+# Le lancement horaire ne sert que de filet de sécurité, si la chaîne s'arrêtait.
+#
+# Démarrer : Actions > Run workflow > « boucle ». Arrêter : variable MODE_TEST à 1
+# (puis « Cancel workflow » sur l'exécution en cours pour un arrêt immédiat).
+
+on:
+  schedule:
+    - cron: "7 * * * *"      # filet de sécurité : relance la chaîne si elle s'est arrêtée
+  workflow_dispatch:
+    inputs:
+      lancement:
+        description: "test = un passage sans rien publier · boucle = démarre les vagues automatiques (MODE_TEST doit valoir 0)"
+        type: choice
+        options:
+          - test
+          - boucle
+        default: test
+
+concurrency:
+  group: reponses-facebook
+  cancel-in-progress: false
+
+jobs:
+  repondre:
+    # Les boucles ne tournent que si MODE_TEST vaut 0. Les tests manuels tournent toujours (sans rien publier).
+    if: (github.event_name == 'workflow_dispatch' && inputs.lancement != 'boucle') || vars.MODE_TEST == '0'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write        # pour démarrer la boucle suivante
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Récupérer la mémoire des commentaires traités
+        uses: actions/cache/restore@v4
+        with:
+          path: etat.json
+          key: etat-${{ github.run_id }}
+          restore-keys: etat-
+
+      - name: Répondre aux commentaires
+        env:
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          # Renseigne UNE SEULE de ces clés dans les secrets
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          IA_API_KEY: ${{ secrets.IA_API_KEY }}
+          IA_BASE_URL: ${{ vars.IA_BASE_URL }}
+          FOURNISSEUR_IA: ${{ vars.FOURNISSEUR_IA }}
+          # Test manuel : rien n'est publié. Boucle : variable MODE_TEST du dépôt.
+          MODE_TEST: ${{ (github.event_name == 'workflow_dispatch' && inputs.lancement != 'boucle') && '1' || vars.MODE_TEST || '1' }}
+          MODELE_IA: ${{ vars.MODELE_IA }}
+          MAX_REPONSES_PAR_EXECUTION: ${{ vars.MAX_REPONSES_PAR_EXECUTION }}
+          AGE_MAX_VIDEO_JOURS: ${{ vars.AGE_MAX_VIDEO_JOURS }}
+          AGE_MAX_COMMENTAIRE_HEURES: ${{ vars.AGE_MAX_COMMENTAIRE_HEURES }}
+          LIKER_COMMENTAIRES: ${{ vars.LIKER_COMMENTAIRES }}
+          VIDEOS_SEULEMENT: ${{ vars.VIDEOS_SEULEMENT }}
+          PAUSE_ENTRE_APPELS_IA: ${{ vars.PAUSE_ENTRE_APPELS_IA }}
+          PAUSE_PUBLICATION_MIN: ${{ vars.PAUSE_PUBLICATION_MIN }}
+          PAUSE_PUBLICATION_MAX: ${{ vars.PAUSE_PUBLICATION_MAX }}
+          DELAI_MIN_COMMENTAIRE_MINUTES: ${{ vars.DELAI_MIN_COMMENTAIRE_MINUTES }}
+          DELAI_MAX_COMMENTAIRE_MINUTES: ${{ vars.DELAI_MAX_COMMENTAIRE_MINUTES }}
+          PAUSE_VAGUE_MIN_MINUTES: ${{ vars.PAUSE_VAGUE_MIN_MINUTES }}
+          PAUSE_VAGUE_MAX_MINUTES: ${{ vars.PAUSE_VAGUE_MAX_MINUTES }}
+          BOUCLE: ${{ (github.event_name == 'schedule' || inputs.lancement == 'boucle') && '1' || '0' }}
+        run: |
+          set -u
+          if [ "$BOUCLE" != "1" ]; then
+            echo "Test manuel : un seul passage, rien n'est publié."
+            python3 reponse_auto.py
+            exit $?
+          fi
+
+          echo "::group::Vague — départ $(date -u '+%H:%M:%S UTC')"
+          python3 reponse_auto.py || echo "⚠️ Vague en erreur : la chaîne continue."
+          echo "::endgroup::"
+
+          MIN=${PAUSE_VAGUE_MIN_MINUTES:-120}
+          MAX=${PAUSE_VAGUE_MAX_MINUTES:-150}
+          [ "$MAX" -lt "$MIN" ] && MAX=$MIN
+          PAUSE=$(( (MIN + RANDOM % (MAX - MIN + 1)) * 60 ))
+          echo "Pause de $(( PAUSE / 60 )) minutes avant la vague suivante (reprise vers $(date -u -d "+$PAUSE seconds" '+%H:%M UTC'))."
+          sleep $PAUSE
+
+      - name: Sauvegarder la mémoire
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: etat.json
+          key: etat-${{ github.run_id }}
+
+      - name: Démarrer la boucle suivante
+        if: success() && vars.MODE_TEST == '0' && (github.event_name == 'schedule' || inputs.lancement == 'boucle')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run reponses-facebook.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" -f lancement=boucle
+          echo "Boucle suivante demandée : elle démarre dès que celle-ci est terminée."
