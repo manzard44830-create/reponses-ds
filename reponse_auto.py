@@ -732,6 +732,9 @@ def nomme_la_voiture(texte):
     if re.search(r"[\U0001F000-\U0001FAFF\u2600-\u27BF]", texte):
         return False                     # avec un emoji (🔥, ❤️…), c'est plutôt une marque d'affection
     mots = re.findall(r"[a-z]+|[0-9]+", sans_accents)
+    # « ID », « DS 19 », « DS 23 »… : la personne affirme un AUTRE modèle -> débat DS / ID, pas un simple nom
+    if "id" in mots or any(m.isdigit() and m not in ("21", "1968", "68") for m in mots):
+        return False
     return 0 < len(mots) <= 6 and all(m in MOTS_NOM_VOITURE for m in mots) and any(m in MOTS_MODELE for m in mots)
 
 
