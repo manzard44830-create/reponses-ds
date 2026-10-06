@@ -179,7 +179,9 @@ def graph(methode, chemin, params=None):
     if methode == "GET":
         resultat = http_json("GET", url + "?" + urllib.parse.urlencode(params))
     else:
-        resultat = http_json(methode, url, donnees=params)
+        # Aucun nouvel essai automatique pour une écriture : si Facebook répond trop lentement,
+        # la publication a souvent eu lieu quand même, et réessayer créerait un doublon.
+        resultat = http_json(methode, url, donnees=params, tentatives=1)
     if "__erreur_http__" in resultat or "error" in resultat:
         erreur = resultat.get("error", {})
         raise ErreurGraph(
@@ -313,14 +315,13 @@ def recuperer_commentaires(objet_id):
 
 
 def page_a_deja_repondu(commentaire):
-    if not commentaire.get("comment_count"):
-        return False
+    # On relit toujours les réponses : le compteur « comment_count » de Facebook peut être en retard.
     reponses = graph_pagine(
         f"{commentaire['id']}/comments",
         {"fields": "from{id}", "limit": 100},
         maximum=300,
     )
-    return any((r.get("from") or {}).get("id") == PAGE_ID for r in reponses)
+    return any(str((r.get("from") or {}).get("id")) == str(PAGE_ID) for r in reponses)
 
 
 def cle_commentaire(commentaire_id):
@@ -1109,8 +1110,31 @@ def main():
                     except ErreurGraph as e:
                         log(f"    (like impossible : {e})")
                 if action == "repondre":
-                    graph("POST", f"{com['id']}/comments", {"message": reponse})
+                    # Dernière vérification juste avant de publier (réponse manuelle, autre exécution…)
+                    if page_a_deja_repondu(com):
+                        log("    (la Page a déjà répondu entre-temps : rien n'est publié)")
+                        etat[cle] = {"date": maintenant, "action": "deja_repondu"}
+                        sauvegarder_etat(etat)
+                        continue
+                    try:
+                        graph("POST", f"{com['id']}/comments", {"message": reponse})
+                    except ErreurGraph as e:
+                        if e.code == 190:
+                            raise
+                        # Facebook a pu publier malgré l'erreur : on vérifie avant de conclure
+                        time.sleep(15)
+                        if page_a_deja_repondu(com):
+                            log(f"    (erreur « {e} » mais la réponse est bien publiée)")
+                        else:
+                            log(f"    ❌ Publication impossible : {e} (code {e.code}). "
+                                "Ce commentaire ne sera pas retenté automatiquement.")
+                            etat[cle] = {"date": maintenant, "action": "echec_publication"}
+                            sauvegarder_etat(etat)
+                            continue
                     publications += 1
+                    # Mémorisé tout de suite : même si l'exécution est annulée, pas de doublon ensuite
+                    etat[cle] = {"date": maintenant, "action": action, "reponse": reponse}
+                    sauvegarder_etat(etat)
                     time.sleep(random.uniform(*PAUSE_ENTRE_PUBLICATIONS))
             except ErreurGraph as e:
                 log(f"    ❌ Publication impossible : {e} (code {e.code})")
