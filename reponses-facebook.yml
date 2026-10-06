@@ -1,12 +1,12 @@
 name: Réponses automatiques Facebook
 
-# Fonctionnement par VAGUES :
-#   1. une vague publie jusqu'à MAX_REPONSES_PAR_EXECUTION réponses (60 conseillé), espacées de
+# Fonctionnement par VAGUES, comme un community manager qui passe toutes les 2 à 3 heures :
+#   1. une vague publie jusqu'à MAX_REPONSES_PAR_EXECUTION réponses (60), espacées de
 #      PAUSE_PUBLICATION_MIN à PAUSE_PUBLICATION_MAX secondes (35 à 75 : environ une heure pour 60) ;
-#   2. puis une vraie pause, tirée au hasard entre PAUSE_VAGUE_MIN_MINUTES et PAUSE_VAGUE_MAX_MINUTES
-#      (120 à 150 par défaut : 2 h à 2 h 30) ;
-#   3. puis l'exécution démarre ELLE-MÊME la vague suivante : le rythme ne dépend pas des
-#      lancements planifiés de GitHub, qui sont souvent sautés.
+#   2. la vague suivante démarre entre INTERVALLE_VAGUES_MIN_MINUTES et INTERVALLE_VAGUES_MAX_MINUTES
+#      après le DÉPART de la précédente (120 à 180 par défaut : une vague toutes les 2 à 3 heures) ;
+#   3. c'est l'exécution elle-même qui attend puis démarre la vague suivante : le rythme ne dépend pas
+#      des lancements planifiés de GitHub, qui sont souvent sautés.
 # Le lancement horaire ne sert que de filet de sécurité, si la chaîne s'arrêtait.
 #
 # Démarrer : Actions > Run workflow > « boucle ». Arrêter : variable MODE_TEST à 1
@@ -71,8 +71,8 @@ jobs:
           PAUSE_PUBLICATION_MAX: ${{ vars.PAUSE_PUBLICATION_MAX }}
           DELAI_MIN_COMMENTAIRE_MINUTES: ${{ vars.DELAI_MIN_COMMENTAIRE_MINUTES }}
           DELAI_MAX_COMMENTAIRE_MINUTES: ${{ vars.DELAI_MAX_COMMENTAIRE_MINUTES }}
-          PAUSE_VAGUE_MIN_MINUTES: ${{ vars.PAUSE_VAGUE_MIN_MINUTES }}
-          PAUSE_VAGUE_MAX_MINUTES: ${{ vars.PAUSE_VAGUE_MAX_MINUTES }}
+          INTERVALLE_VAGUES_MIN_MINUTES: ${{ vars.INTERVALLE_VAGUES_MIN_MINUTES }}
+          INTERVALLE_VAGUES_MAX_MINUTES: ${{ vars.INTERVALLE_VAGUES_MAX_MINUTES }}
           BOUCLE: ${{ (github.event_name == 'schedule' || inputs.lancement == 'boucle') && '1' || '0' }}
         run: |
           set -u
@@ -82,16 +82,20 @@ jobs:
             exit $?
           fi
 
+          DEPART=$(date +%s)
           echo "::group::Vague — départ $(date -u '+%H:%M:%S UTC')"
           python3 reponse_auto.py || echo "⚠️ Vague en erreur : la chaîne continue."
           echo "::endgroup::"
 
-          MIN=${PAUSE_VAGUE_MIN_MINUTES:-120}
-          MAX=${PAUSE_VAGUE_MAX_MINUTES:-150}
+          # Prochaine vague : 2 à 3 heures après le DÉPART de celle-ci (et non après sa fin)
+          MIN=${INTERVALLE_VAGUES_MIN_MINUTES:-120}
+          MAX=${INTERVALLE_VAGUES_MAX_MINUTES:-180}
           [ "$MAX" -lt "$MIN" ] && MAX=$MIN
-          PAUSE=$(( (MIN + RANDOM % (MAX - MIN + 1)) * 60 ))
-          echo "Pause de $(( PAUSE / 60 )) minutes avant la vague suivante (reprise vers $(date -u -d "+$PAUSE seconds" '+%H:%M UTC'))."
-          sleep $PAUSE
+          ECART=$(( (MIN + RANDOM % (MAX - MIN + 1)) * 60 ))
+          PROCHAINE=$(( DEPART + ECART ))
+          ATTENTE=$(( PROCHAINE - $(date +%s) ))
+          echo "Vague terminée en $(( ( $(date +%s) - DEPART ) / 60 )) min. Prochaine vague $(( ECART / 60 )) min après le départ de celle-ci, vers $(date -u -d "@$PROCHAINE" '+%H:%M UTC')."
+          [ $ATTENTE -gt 0 ] && sleep $ATTENTE
 
       - name: Sauvegarder la mémoire
         if: always()
