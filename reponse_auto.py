@@ -738,6 +738,41 @@ def nomme_la_voiture(texte):
     return 0 < len(mots) <= 6 and all(m in MOTS_NOM_VOITURE for m in mots) and any(m in MOTS_MODELE for m in mots)
 
 
+AUTRE_MODELE = re.compile(r"\b(?:id|ds|d)\s?(?:19|20|23)\b|\bid\b|\bd\s?super\b", re.I)
+NEGATION = re.compile(r"\b(?:pas|non|not|isn'?t|no|nicht|kein\w*|niet|geen|nie)\b[\s\w'’]{0,12}$", re.I)
+APPROBATION = re.compile(
+    r"^\s*(?:bien vu|œil de (?:connaisseur|lynx)|exactement|tout à fait|vous avez raison|absolument|"
+    r"c'est vrai|en effet|analyse très juste|bonne remarque|good eye|exactly|you'?re right|spot on|"
+    r"esatto|esattamente|giusto|hai ragione|exacto|tiene razón|genau|stimmt|klopt|dokładnie)\b", re.I)
+
+
+def affirme_autre_modele(texte):
+    """Vrai si la personne affirme que la voiture est un AUTRE modèle (« Ds 19 », « c'est une ID ») :
+    elle se trompe. Faux si elle le nie (« ce n'est pas une DS 19 ») : là, elle a raison."""
+    court = len(re.findall(r"[^\W\d_]+|\d+", texte)) <= 6
+    affirme = re.search(r"(?<![\w'’])(?:c'?\s?est|c|cé|cest|it'?s|that'?s|è|es|ist|is|to)(?![\w'’])", texte, re.I)
+    if not (court or affirme):
+        return False                     # un avis plus long (« La DS 19 était plus belle ») n'est pas une erreur
+    for m in AUTRE_MODELE.finditer(texte):
+        if not NEGATION.search(texte[:m.start()]):
+            return True
+    return False
+
+
+def retirer_approbation(reponse, max_phrases=None):
+    """Retire une accroche qui félicite (« Bien vu ! ») au début d'une correction."""
+    phrases = _phrases(reponse)
+    if phrases and APPROBATION.search(phrases[0]):
+        reste = APPROBATION.sub("", phrases[0], count=1).lstrip(" ,:;!.-—")
+        if len(re.findall(r"[^\W\d_]+", reste)) < 3:
+            phrases = phrases[1:]                      # « Bien vu ! » seul : on l'enlève
+        else:
+            phrases[0] = reste[:1].upper() + reste[1:]  # « Bien vu, celle-ci… » -> « Celle-ci… »
+    if max_phrases:
+        phrases = phrases[:max_phrases]
+    return " ".join(phrases).strip()
+
+
 def decider_reponse(ton, video, commentaire, reponses_recentes):
     auteur = (commentaire.get("from") or {}).get("name", "")
     prenom = auteur.split(" ")[0] if auteur else ""
@@ -897,6 +932,10 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
         if not merci_seul and longueur == "courte" and len(garde) == 2 and len(garde[1]) > 90:
             garde = garde[:1]            # phrase « courte » trop longue : on garde le merci seul
         reponse = " ".join(garde).strip() + (" 🤎" if coeur else "")
+    # La personne affirme un autre modèle (elle se trompe) : jamais de « Bien vu ! », deux phrases pour un commentaire court
+    if action == "repondre" and reponse and affirme_autre_modele(texte_commentaire):
+        court = len(re.findall(r"[^\W\d_]+|\d+", texte_commentaire)) <= 6
+        reponse = retirer_approbation(reponse, max_phrases=2 if court else None) or reponse
     # Commentaire qui nomme seulement la voiture : une seule phrase, sans remerciement
     if nom_voiture and action == "repondre" and reponse:
         phrases = [p for p in _phrases(reponse) if not est_remerciement(p)]
