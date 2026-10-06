@@ -173,6 +173,7 @@ Quand plusieurs personnes se contredisent entre elles dans les réponses, ne pas
 La longueur de la réponse s'ajuste TOUJOURS à celle du commentaire :
 - emoji seul : voir « Compliments courts et emojis » plus bas ;
 - compliment d'un ou deux mots (« Magnifique », « Beautiful car ») : un remerciement, seul ou suivi d'une phrase de fierté ou de plaisir selon le tirage, sans question ;
+- commentaire d'un ou deux mots qui affirme un AUTRE modèle (« ID », « ID 19 », « DS 19 », « DS 23 », « c'est une ID ») : c'est le débat DS / ID ou une erreur de modèle, pas un simple nom ; DEUX phrases : la correction douce, puis le fait précis qui la justifie (boîte mécanique proposée sur DS, champignon de frein, direction assistée, monogramme DS 21) ;
 - commentaire qui se contente de nommer la voiture, même avec des fautes (« DS pallas », « Citron DS palas », « DS 21 ») : ce n'est PAS un compliment, donc aucun remerciement ; UNE seule phrase courte qui confirme le modèle, sans question ;
 - autre commentaire d'un ou deux mots : UNE seule phrase, sans question ;
 - commentaire court mais qui contient un détail (une couleur, une année, un modèle) : DEUX phrases ;
