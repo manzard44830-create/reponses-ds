@@ -358,9 +358,11 @@ Règles de rédaction :
 Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour :
 {"action": "repondre" | "liker" | "ignorer", "langue_commentaire": "code ISO à 2 lettres (fr, it, en, es, de, vi…)", "compliment": true | false, "compliment_pur": true | false, "temoignage": true | false, "reponse": "texte de la réponse (vide sinon)", "raison": "quelques mots"}
 "langue_commentaire" : identifie d'abord la langue du commentaire ; la réponse est OBLIGATOIREMENT écrite dans cette langue.
-"compliment" vaut true UNIQUEMENT si le commentaire est un éloge adressé à cette voiture, à la vidéo ou à la Page \
-(emoji de compliment compris). Souvenir, rêve, nostalgie, avis sur Citroën ou sur l'époque, témoignage, question, \
-critique ou photo : false, et alors AUCUN remerciement dans la réponse.
+"compliment" vaut true UNIQUEMENT si le commentaire est un éloge adressé à CETTE voiture (celle de la vidéo), \
+à la vidéo ou à la Page (emoji de compliment compris). Une phrase générale sur la DS, Citroën ou l'époque, même \
+élogieuse (« Celui qui n'a jamais conduit une DS a loupé sa vie », « La DS est la plus belle voiture du monde », \
+« Citroën savait faire des bagnoles »), une blague, un avis, un souvenir, un rêve, un témoignage court, une question, \
+une critique ou une photo : false, et alors AUCUN remerciement dans la réponse.
 "compliment_pur" vaut true seulement si le commentaire est UNIQUEMENT un éloge, sans aucune remarque, \
 correction, question ni information (« Magnifique », « Yo❤️Citroen ») ; « Belle mais pas de 1961 » : false.
 "temoignage" vaut true si la personne raconte un souvenir personnel en prenant le temps de le développer : \
@@ -747,6 +749,21 @@ APPROBATION = re.compile(
     r"esatto|esattamente|giusto|hai ragione|exacto|tiene razón|genau|stimmt|klopt|dokładnie)\b", re.I)
 
 
+GENERALITE = re.compile(
+    r"\b(?:une|les|la|des)\s+ds\b|\bcitro[eë]n\b|\bcelui qui\b|\bceux qui\b|\bquiconque\b|\bqui n'?a jamais\b|"
+    r"\banyone who\b|\bwhoever\b|\bevery ds\b|\bchi non\b|\bquien no\b|\bwer nie\b|\bthe ds\b|\ba ds\b", re.I)
+DESIGNE_CETTE_VOITURE = re.compile(
+    r"\b(?:elle|cette|celle-ci|votre|vôtre|vos|ta|ton|this|your|yours|she|her|questa|tua|vostra|esta|este|su|"
+    r"diese|dieser|ihre|deze|jouw|uw|ta voiture|la voiture|cette voiture|cette ds|la vidéo|video|vidéo)\b", re.I)
+
+
+def est_generalite(texte):
+    """Vrai pour une phrase générale sur la DS ou Citroën (« Celui qui n'a jamais conduit une DS… ») :
+    ce n'est pas un compliment adressé à CETTE voiture, donc pas de remerciement."""
+    mots = re.findall(r"[^\W\d_]+", texte)
+    return len(mots) >= 5 and bool(GENERALITE.search(texte)) and not DESIGNE_CETTE_VOITURE.search(texte)
+
+
 def affirme_autre_modele(texte):
     """Vrai si la personne affirme que la voiture est un AUTRE modèle (« Ds 19 », « c'est une ID ») :
     elle se trompe. Faux si elle le nie (« ce n'est pas une DS 19 ») : là, elle a raison."""
@@ -862,6 +879,11 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
     if nom_voiture:
         decision["compliment"] = False
         decision["temoignage"] = False
+    if est_generalite(texte_com):
+        # phrase générale sur la DS / Citroën : pas un compliment sur CETTE voiture -> pas de remerciement
+        # (un souvenir développé garde son remerciement final, géré par « temoignage »)
+        decision["compliment"] = False
+        decision["compliment_pur"] = False
     # Pas de compliment => aucun remerciement : on redemande une fois, puis on retire les phrases de remerciement.
     texte_commentaire = commentaire.get("message") or ""
     temoignage = bool(decision.get("temoignage")) and len(re.findall(r"[^\W\d_]+", texte_commentaire)) >= MOTS_MIN_TEMOIGNAGE
