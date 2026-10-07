@@ -123,6 +123,10 @@ def delai_du_commentaire(cle):
     return timedelta(minutes=DELAI_MIN_COMMENTAIRE + tirage * (DELAI_MAX_COMMENTAIRE - DELAI_MIN_COMMENTAIRE))
 LONGUEUR_MAX_REPONSE = 200     # caractères au total, espaces et phrase finale « Merci pour ce témoignage » compris
 PHRASES_MAX_REPONSE = 3        # phrases, hors phrase finale « Merci pour ce témoignage »
+EXCES = re.compile(
+    r"\btrop\b|adorable|du fond du c(?:œ|oe)ur|infiniment|mille mercis|droit au c(?:œ|oe)ur|chaud au c(?:œ|oe)ur|"
+    r"\bénorm|incroyabl|génial|merveilleusement|thanks a million|warms my heart|so so |grazie infinite|scalda il cuore|"
+    r"mil gracias|gracias infinitas|llega al coraz|tausend dank|wärmt mir|duizendmaal|stokrotn|muitíssimo|aquece o cora", re.I)
 MARQUEURS_ORAL = re.compile(
     r"^\s*(?:franchement|honnêtement|en tout cas|il faut dire que|pour tout vous dire|je dois dire que|"
     r"je vous avoue que|je ne vais pas vous mentir|je crois que|je me dis souvent que|à chaque fois, je me dis que)\b",
@@ -816,7 +820,7 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
     # Tirage au sort pour varier les réponses aux compliments (listes numérotées dans la fiche)
     texte_com = commentaire.get("message") or ""
     emoji_seul = bool(texte_com.strip()) and not re.search(r"[^\W_]", texte_com)
-    merci_seul = emoji_seul or random.random() < 0.5   # emoji de compliment : toujours un merci seul
+    merci_seul = emoji_seul or random.random() < 0.9   # 9 compliments sur 10 : un simple merci
     longueur = random.choice(["courte", "développée"])
     forme = random.choice(["première personne", "impersonnelle"])
     langue = detecter_langue(texte_com)
@@ -830,14 +834,24 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
     FORMULES_MERCI.clear()
     FORMULES_MERCI.update(_normaliser(f) for cle in ("emojis", "fr", "en", "it", "es", "de", "nl", "pl", "pt")
                           for f in listes.get(cle, []) if _normaliser(f))
-    n_merci = random.randint(1, 15)
-    liste_merci = listes["emojis"] if emoji_seul else listes.get(langue or "fr") or listes["fr"]
-    if liste_merci and n_merci <= len(liste_merci) and (emoji_seul or langue in listes):
-        merci = f"remerciement à utiliser, tel quel : « {liste_merci[n_merci - 1]} »"
+    formule_tiree = None
+    # Formule de remerciement tirée au sort, en évitant celles des réponses récentes
+    debuts_recents = {_normaliser(_phrases(t)[0]) for t in reponses_recentes[-25:] if t and _phrases(t)}
+    def tirer(liste):
+        libres = [i for i, f in enumerate(liste, 1) if _normaliser(f) not in debuts_recents]
+        return random.choice(libres or list(range(1, len(liste) + 1)))
+    if emoji_seul:
+        liste_merci = listes["emojis"]
     else:
+        liste_merci = listes.get(langue) if langue in listes else None
+    if liste_merci:
+        n_merci = tirer(liste_merci)
+        formule_tiree = liste_merci[n_merci - 1]
+        merci = f"remerciement à utiliser, tel quel : « {formule_tiree} »"
+    else:
+        n_merci = random.randint(1, min(len(listes[lg]) for lg in NOMS_LANGUES if listes.get(lg)))
         equivalents = [f"{NOMS_LANGUES[lg]} : « {listes[lg][n_merci - 1]} »"
-                       for lg in ("fr", "en", "it", "es", "de", "nl", "pl", "pt")
-                       if lg in listes and len(listes[lg]) >= n_merci]
+                       for lg in ("fr", "en", "it", "es", "de", "nl", "pl", "pt") if listes.get(lg)]
         merci = ("remerciement : prends, TEL QUEL, celui de la langue du commentaire parmi "
                  + " ; ".join(equivalents) + " (autre langue : exprime la version française dans cette langue)")
     contexte.append(
@@ -848,7 +862,8 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
         + ("merci seul (ne rien ajouter après le merci, sauf pour un compliment long)"
            if merci_seul else "merci suivi d'une phrase")
         + f", angle n°{random.randint(1, 9)}, longueur de la phrase : {longueur} (UNE seule phrase, même développée), "
-        f"forme : {forme}, marqueur de l'oral : {marqueur}, cœur 🤎 : {random.choice(['oui', 'non'])}."
+        f"forme : {forme}, marqueur de l'oral : {marqueur}, cœur 🤎 : {random.choice(['oui', 'non'])}. "
+        "Ton poli et chaleureux mais modéré : jamais « trop », « adorable », « du fond du cœur », « infiniment »."
     )
     fin = random.choice(listes["temoignage"]) if listes["temoignage"] else "Merci pour ce témoignage."
     contexte.append(
@@ -959,14 +974,26 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
     # Merci seul -> 1 phrase ; merci + phrase -> 2 phrases au maximum ; phrase courte -> 90 caractères au plus.
     mots_com = re.findall(r"[^\W\d_]+", texte_commentaire)
     if action == "repondre" and reponse and decision.get("compliment") and decision.get("compliment_pur") \
-            and not temoignage and not emoji_seul and len(mots_com) <= 6 \
+            and not temoignage and not emoji_seul \
             and not re.search(r"\?|\bmais\b|\bpas\b|\bbut\b|\bnot\b|\bma\b|\bpero\b|\bnon\b|\d", texte_commentaire, re.I):
         coeur = reponse.rstrip().endswith("🤎")
         phrases = _phrases(reponse.replace("🤎", "").strip())
-        garde = phrases[:1] if merci_seul else phrases[:2]
+        if merci_seul:
+            merci_trouve = [p for p in phrases if est_remerciement(p)]
+            garde = merci_trouve[:1] or phrases[:1]     # on garde le remerciement, et rien d'autre
+        else:
+            garde = phrases[:2] if len(mots_com) <= 6 else phrases[:3]
         if not merci_seul and longueur == "courte" and len(garde) == 2 and len(garde[1]) > 90:
             garde = garde[:1]            # phrase « courte » trop longue : on garde le merci seul
         reponse = " ".join(garde).strip() + (" 🤎" if coeur else "")
+    if action == "repondre" and reponse and decision.get("compliment") and not temoignage and not emoji_seul:
+        # Ton modéré : une formule excessive est remplacée par la formule tirée au sort (ou retirée)
+        if EXCES.search(reponse):
+            phrases = [p for p in _phrases(reponse) if not EXCES.search(p)]
+            reponse = formule_tiree if (formule_tiree and not phrases) else (" ".join(phrases) or formule_tiree or reponse)
+        # Une fois sur deux, pas de point d'exclamation à la fin
+        if random.random() < 0.5 and "¡" not in reponse:
+            reponse = re.sub(r"\s*!\s*(🤎)?\s*$", lambda m: " 🤎" if m.group(1) else "", reponse).strip()
     # La personne affirme un autre modèle (elle se trompe) : jamais de « Bien vu ! », deux phrases pour un commentaire court
     if action == "repondre" and reponse and affirme_autre_modele(texte_commentaire):
         court = len(re.findall(r"[^\W\d_]+|\d+", texte_commentaire)) <= 6
