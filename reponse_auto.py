@@ -121,7 +121,12 @@ def delai_du_commentaire(cle):
     import hashlib
     tirage = int(hashlib.md5(str(cle).encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
     return timedelta(minutes=DELAI_MIN_COMMENTAIRE + tirage * (DELAI_MAX_COMMENTAIRE - DELAI_MIN_COMMENTAIRE))
-LONGUEUR_MAX_REPONSE = 400
+LONGUEUR_MAX_REPONSE = 200     # caractères au total, espaces et phrase finale « Merci pour ce témoignage » compris
+PHRASES_MAX_REPONSE = 3        # phrases, hors phrase finale « Merci pour ce témoignage »
+MARQUEURS_ORAL = re.compile(
+    r"^\s*(?:franchement|honnêtement|en tout cas|il faut dire que|pour tout vous dire|je dois dire que|"
+    r"je vous avoue que|je ne vais pas vous mentir|je crois que|je me dis souvent que|à chaque fois, je me dis que)\b",
+    re.I)
 
 
 def log(*args):
@@ -837,7 +842,8 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
                  + " ; ".join(equivalents) + " (autre langue : exprime la version française dans cette langue)")
     contexte.append(
         "Tirage de variété (à suivre SEULEMENT si le commentaire est un compliment adressé à cette voiture, "
-        "à la vidéo ou à la Page, ou un emoji de compliment ; sinon AUCUN remerciement, ignore ce tirage) : "
+        "à la vidéo ou à la Page, ou un emoji de compliment ; sinon IGNORE ENTIÈREMENT ce tirage : ni remerciement, "
+        "ni phrase de fierté, ni marqueur de l'oral) : "
         f"{merci}, "
         + ("merci seul (ne rien ajouter après le merci, sauf pour un compliment long)"
            if merci_seul else "merci suivi d'une phrase")
@@ -869,6 +875,12 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
             "phrase courte qui confirme le modèle (une DS 21 Pallas de 1968), sans aucun remerciement, sans question, "
             "sans détail supplémentaire."
         )
+
+    contexte.append(
+        f"LONGUEUR (obligatoire) : {LONGUEUR_MAX_REPONSE} caractères MAXIMUM au total, espaces compris, et 3 phrases "
+        "au plus. Commence par l'essentiel : la réponse à la question ou la correction d'abord, le reste ensuite s'il "
+        "reste de la place. Au-delà de la limite, les dernières phrases sont supprimées automatiquement."
+    )
 
     consignes = CONSIGNES_SYSTEME + "\n\n# Consignes propres à la Page\n\n" + ton
     texte = appeler_ia(consignes, "\n\n".join(contexte))
@@ -981,9 +993,35 @@ def decider_reponse(ton, video, commentaire, reponses_recentes):
             return "liker", "", "emoji de compliment : simple like cette fois (tirage 1 sur 2)"
         if random.random() < 0.5 and "¡" not in reponse:
             reponse = re.sub(r"\s*!\s*(🤎)?\s*$", lambda m: " 🤎" if m.group(1) else "", reponse).strip()
-    if len(reponse) > LONGUEUR_MAX_REPONSE:
-        reponse = reponse[:LONGUEUR_MAX_REPONSE].rsplit(" ", 1)[0] + "…"
+    reponse = limiter_longueur(reponse, compliment=bool(decision.get("compliment")), temoignage=temoignage)
     return action, reponse, decision.get("raison", "")
+
+
+def limiter_longueur(reponse, compliment, temoignage):
+    """Réponse de LONGUEUR_MAX_REPONSE caractères au plus, toujours terminée proprement (jamais coupée en plein mot)."""
+    if not reponse:
+        return reponse
+    phrases = _phrases(reponse)
+    fin = ""
+    if temoignage and len(phrases) > 1 and est_remerciement(phrases[-1]):
+        fin = phrases.pop()                            # « Merci pour ce témoignage. » : toujours gardé
+    if not compliment and len(phrases) > 1:
+        # La phrase de fierté avec marqueur (« Honnêtement, … ») n'est prévue que pour les compliments
+        sans = [p for i, p in enumerate(phrases) if i == 0 or not MARQUEURS_ORAL.search(p)]
+        phrases = sans or phrases
+    phrases = phrases[:PHRASES_MAX_REPONSE]
+    place = LONGUEUR_MAX_REPONSE - (len(fin) + 1 if fin else 0)
+    while len(phrases) > 1 and len(" ".join(phrases)) > place:
+        phrases.pop()                                  # on retire des phrases entières en partant de la fin
+    corps = " ".join(phrases).strip()
+    if len(corps) > place:
+        # Une seule phrase encore trop longue : on la termine au dernier membre de phrase qui tient
+        coupe = corps[:place - 1]
+        pos = max(coupe.rfind(sep) for sep in (", ", " : ", " ; ", " – ", " — "))
+        if pos < place // 2:
+            pos = coupe.rfind(" ")
+        corps = coupe[:pos].rstrip(" ,;:–—") + "."
+    return " ".join([corps] + ([fin] if fin else [])).strip()
 
 
 # --------------------------------------------------------------------------- #

@@ -179,7 +179,7 @@ La longueur de la réponse s'ajuste TOUJOURS à celle du commentaire :
 - commentaire court mais qui contient un détail (une couleur, une année, un modèle) : DEUX phrases ;
 - témoignage ou commentaire développé : deux à trois phrases, avec une question finale possible. Pour un souvenir personnel développé, ajouter en toute fin la courte phrase qui remercie pour le témoignage (voir « Exception : souvenir développé ») ; elle ne compte pas dans les trois phrases.
 
-Une réponse fait entre 60 et 180 caractères selon ce dosage (un peu plus seulement si une correction DS/ID demande une explication). Structure :
+Une réponse fait entre 60 et 180 caractères selon ce dosage (un peu plus seulement si une correction DS/ID ou une question demande une explication), et JAMAIS plus de trois phrases ni 200 caractères (espaces compris) : aller à l'essentiel. La phrase de fierté (angle, marqueur de l'oral comme « Honnêtement… ») est réservée aux compliments : ne jamais l'ajouter à un souvenir, une question ou une correction. Structure :
 
 1. Une accroche courte qui valide la personne, en variant : « Bien vu ! », « Analyse très juste ! », « Tout à fait », « Exactement ! », « C'est vrai », « Superbe ! », « Hélas… », « Aïe… », « Quelle chance… », « Quel beau témoignage ! ». Parfois pas d'accroche du tout : on commence directement par une phrase nominale.
 2. Une relance qui reprend le détail précis donné par la personne (son année, sa couleur, son modèle, son voyage, sa panne) et y ajoute un élément de connaisseur sur la DS. Quand un terme est technique (sphères, LHM, champignon de frein, tête de delco), l'expliquer en trois mots pour rester clair pour ceux qui n'ont pas connu l'époque.
