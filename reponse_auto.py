@@ -800,7 +800,23 @@ def retirer_approbation(reponse, max_phrases=None):
     return " ".join(phrases).strip()
 
 
+MUSIQUE = re.compile(
+    r"musi[qck]|m[uú]sica|muzi[ek]|muzyk|\bzik\b|chanson|chanteu[rs]e?|\bsong|singer|canzon|"
+    r"(?:titre|nom) d[ue]s? son\b|\bquel son\b|c'?\s?est quoi (?:le|ce) son\b|\ble son (?:de la|du) (?:vid|reel)|"
+    r"cantant|canci[oó]n|\blied\b|s[äa]nger|zanger|piosenk|bande[- ]son|soundtrack|playlist|m[ée]lodi|melody|\btune\b|"
+    r"accord[ée]on|\bair de\b|aznavour|gainsbourg|\bbrel\b|\bpiaf\b|trenet|dutronc|hallyday|\bjohnny\b|sardou|"
+    r"brassens|\bferr[ée]\b|montand|b[ée]caud|\bdassin\b|gr[ée]co|dalida|claude fran[cç]ois|cloclo|polnareff|"
+    r"bashung|souchon|voulzy|goldman|aznavur|🎵|🎶|🎤|🎼|🎧|🎷|🎸|🎹|🎺|🎻", re.I)
+
+
+def parle_de_musique(texte):
+    """Vrai si le commentaire parle de musique ou d'un chanteur : on ne répond pas."""
+    return bool(MUSIQUE.search(texte or ""))
+
+
 def decider_reponse(ton, video, commentaire, reponses_recentes):
+    if parle_de_musique(commentaire.get("message")):
+        return "ignorer", "", "commentaire sur la musique ou un chanteur (règle fixe : pas de réponse)"
     auteur = (commentaire.get("from") or {}).get("name", "")
     prenom = auteur.split(" ")[0] if auteur else ""
     piece = (commentaire.get("attachment") or {}).get("type", "")
